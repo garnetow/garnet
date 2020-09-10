@@ -6,6 +6,14 @@
 @Time   : 2020/9/9 14:48
 """
 
+from enum import Enum
+
+
+class DatasetKind(Enum):
+    Unspecified = 0
+    Map = 1
+    Iterable = 2
+
 
 class Dataset(object):
     r"""An abstract class representing a :class:`Dataset`.
@@ -14,6 +22,7 @@ class Dataset(object):
     - Mapping style: :class:`MappingDataset`
     - Iterable style: :class:`IterableDataset`
     """
+    kind = DatasetKind.Unspecified
 
     def __iter__(self):
         raise self
@@ -30,6 +39,7 @@ class MappingDataset(Dataset):
 
     Implement :meth:`__getitem__` and :meth:`__len__` for subclasses.
     """
+    kind = DatasetKind.Map
 
     def __getitem__(self, index):
         raise NotImplementedError
@@ -51,6 +61,7 @@ class IterableDataset(Dataset):
 
     Implement :meth:`iter` for subclasses.
     """
+    kind = DatasetKind.Iterable
 
     def iter(self):
         raise NotImplementedError
@@ -69,8 +80,9 @@ class MultiListDataset(MappingDataset):
     Each sample will be retrieved by indexing data along the first dimension.
 
     Arguments:
-        :param tensors that have the same size of the first dimension.
+        :param lists: tensors that have the same size of the first dimension.
     """
+
     def __init__(self, *lists):
         assert all(len(single) == len(single[0]) for single in lists)
         self.data = lists
