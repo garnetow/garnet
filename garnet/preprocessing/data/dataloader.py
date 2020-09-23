@@ -6,9 +6,13 @@
 @Time   : 2020/9/10 10:28
 """
 
+import random
+from keras.utils import GeneratorEnqueuer
+
 from .dataset import Dataset, DatasetKind
 from .sampler import Sampler, BatchSampler, InfiniteStreamSampler, SequentialSampler, RandomSampler
 from .collator import Collator
+from .fetcher import MappingFetcher, IterableFetcher
 
 
 class DataLoader(object):
@@ -30,6 +34,7 @@ class DataLoader(object):
             mini-batch. Used when using batched loading from a map-style dataset.
         :param num_workers (int, optional, default: 0): how many subprocesses to use for data loading. `0` means that
             the data will be loaded in the main process.
+        :param queue_size (int, optional, default: 1024): queue size. Maximum number of samples stored in the queue.
     """
 
     def __init__(self,
@@ -40,11 +45,13 @@ class DataLoader(object):
                  sampler: Sampler = None,
                  batch_sampler: BatchSampler = None,
                  collator: Collator = None,
-                 num_workers: int = 0):
+                 num_workers: int = 0,
+                 queue_size: int = 1024):
         self.dataset = dataset
         self._dataset_kind = self.dataset.kind
         self.batch_size = batch_size
         self.num_workers = num_workers
+        self.queue_size = queue_size
 
         if dataset.kind == DatasetKind.Iterable:
             if sampler is not None:
@@ -109,6 +116,7 @@ class BaseDataIterator(object):
     def __init__(self, data_loader: DataLoader):
         self.dataset = data_loader.dataset
         self._dataset_kind = data_loader._dataset_kind
+        self._auto_batch = data_loader.auto_batch
         self.shuffle = data_loader.shuffle
         self.drop_last = data_loader.drop_last
         self.batch_size = data_loader.batch_size
@@ -117,6 +125,7 @@ class BaseDataIterator(object):
         self.index_sampler = data_loader.index_sampler
         self._index_iter = iter(self.index_sampler)
         self.num_workers = data_loader.num_workers
+        self.queue_size = data_loader.queue_size
         self.collator = data_loader.collator
 
     def __iter__(self):
@@ -132,9 +141,12 @@ class BaseDataIterator(object):
         raise NotImplementedError
 
 
-class MappingDataIterator(BaseDataIterator):
+class SingleProcessDataIterator(BaseDataIterator):
     def __init__(self, data_loader):
         super().__init__(data_loader)
+        self.fetcher = MappingFetcher(self.dataset, self._auto_batch, self.collator, self.drop_last) \
+            if self._dataset_kind == DatasetKind.Map else \
+            IterableFetcher(self.dataset, self._auto_batch, self.collator, self.drop_last)
         self._num_yielded = 0
 
     def __next__(self):
@@ -145,8 +157,51 @@ class MappingDataIterator(BaseDataIterator):
     def __len__(self):
         return len(self.index_sampler)
 
+    def _next_data(self):
+        indices = self._next_index()
+        data = self.fetcher.fetch(indices)
+        return data
 
-class SingleProcessMappingDataIterator(MappingDataIterator):
+
+class _MPAssistantIterator(object):
+    def __init__(self, dataset, collator):
+        self.dataset = dataset
+        self.collator = collator
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        data = next(self.dataset)
+        return self.collator.collate_fn(data)
+
+
+class MultiProcessIterableDataIterator(BaseDataIterator):
     def __init__(self, data_loader):
         super().__init__(data_loader)
-        self.fetcher = None  # TODO: Fetcher
+
+        generator = _MPAssistantIterator(self.dataset, self.collator)
+        self.enqueuer = GeneratorEnqueuer(generator, use_multiprocessing=True)
+        self.enqueuer.start(workers=self.num_workers, max_queue_size=self.queue_size)
+        self.output_generator = self.enqueuer.get()
+
+        self.buffer = []
+
+    def __next__(self):
+        data = []
+        batch_indices = self._next_index()
+        for _ in batch_indices:
+            try:
+                while len(self.buffer) < self.queue_size:
+                    output = next(self.output_generator)
+                    self.buffer.append(output)
+            except StopIteration:
+                pass
+
+            if self.buffer:
+                i = random.randrange(len(self.buffer))
+                data.append(self.buffer.pop(i))
+
+        if len(data) == 0 or (self.drop_last and len(data) < len(batch_indices)):
+            raise StopIteration
+        return data
