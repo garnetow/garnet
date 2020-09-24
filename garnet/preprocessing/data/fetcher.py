@@ -23,7 +23,7 @@ class MappingFetcher(Fetcher):
         if self._auto_batch:
             data = [self.dataset[index] for index in batch_indices]
         else:
-            data = [self.dataset[batch_indices]]
+            data = self.dataset[batch_indices]
         return self.collator.collate_fn(data)
 
 
@@ -39,5 +39,5 @@ class IterableFetcher(Fetcher):
             if len(data) == 0 or (self._drop_last and len(data) < len(batch_indices)):
                 raise StopIteration
         else:
-            data = [next(self.dataset)]
+            data = next(self.dataset)
         return self.collator.collate_fn(data)

@@ -6,6 +6,7 @@
 @Time   : 2020/9/9 14:48
 """
 
+import numpy as np
 from enum import Enum
 
 
@@ -74,21 +75,43 @@ class IterableDataset(Dataset):
         return next(self._iterator)
 
 
-class MultiListDataset(MappingDataset):
+class MatrixDataset(MappingDataset):
     r"""Dataset wrapping list-like data.
 
     Each sample will be retrieved by indexing data along the first dimension.
 
     Arguments:
-        :param lists: tensors that have the same size of the first dimension.
+        :param arrays: tensors that have the same size of the first dimension.
+        :param labels: label matrices.
+        :param y_out (bool, default: True): whether to export label. If `true`, a tuple in (x, y) format will be the
+            result.
     """
 
-    def __init__(self, *lists):
-        assert all(len(single) == len(single[0]) for single in lists)
-        self.data = lists
+    def __init__(self, arrays, labels=None, y_out=True):
+        if isinstance(arrays, np.ndarray):
+            arrays = [arrays]
+        if labels is not None and isinstance(labels, np.ndarray):
+            labels = [labels]
+        assert all(len(single) == len(arrays[0]) for single in arrays)
+        if labels is not None:
+            assert all(len(single) == len(arrays[0]) for single in labels)
+            assert y_out is True
+        self.data = arrays
+        self.labels = labels
+        self._y_out = y_out
 
     def __getitem__(self, index):
-        return [single[index] for single in self.data]
+        if self.has_label:
+            return [single[index] for single in self.data], [single[index] for single in self.labels]
+        else:
+            if self._y_out:
+                return [single[index] for single in self.data], None
+            else:
+                return [single[index] for single in self.data]
 
     def __len__(self):
         return len(self.data[0])
+
+    @property
+    def has_label(self):
+        return True if self.labels else False

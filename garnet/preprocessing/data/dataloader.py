@@ -11,7 +11,7 @@ from keras.utils import GeneratorEnqueuer
 
 from .dataset import Dataset, DatasetKind
 from .sampler import Sampler, BatchSampler, InfiniteStreamSampler, SequentialSampler, RandomSampler
-from .collator import Collator
+from .collator import Collator, SingleSampleCollator, BatchSampleCollator
 from .fetcher import MappingFetcher, IterableFetcher
 
 
@@ -94,14 +94,14 @@ class DataLoader(object):
         self.batch_sampler = batch_sampler
 
         if collator is None:
-            pass  # TODO: Collator class
+            collator = BatchSampleCollator() if self.auto_batch else SingleSampleCollator()
         self.collator = collator
 
     def __iter__(self):
         if self.num_workers == 0:
-            pass
+            return SingleProcessDataIterator(self)
         else:
-            pass
+            return MultiProcessIterableDataIterator(self)
 
     @property
     def auto_batch(self):
