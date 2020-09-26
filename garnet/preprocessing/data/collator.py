@@ -59,7 +59,7 @@ class BatchSampleCollator(Collator):
         elif isinstance(sample, typing.Mapping):
             return {key: self.collate_fn([d[key] for d in batch_data]) for key in sample}
         elif isinstance(sample, tuple):
-            return tuple(*(self.collate_fn(piece) for piece in zip(*batch_data)))
+            return tuple([self.collate_fn(piece) for piece in zip(*batch_data)])
         elif isinstance(sample, typing.Sequence):
             return [np.array(piece) for piece in zip(*batch_data)]
         raise TypeError("batch must contain numpy arrays, numbers, dicts or lists; found {}".format(type(sample)))
