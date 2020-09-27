@@ -49,11 +49,17 @@ class MappingDataset(Dataset):
         raise NotImplementedError
 
     def __iter__(self):
-        self._index = iter(range(len(self)))
         return self
 
     def __next__(self):
-        return self[next(self._index)]
+        if getattr(self, '_internal_iter', None) is None:
+            self._internal_iter = iter(range(len(self)))
+        try:
+            index = next(self._internal_iter)
+        except StopIteration:
+            self._internal_iter = iter(range(len(self)))
+            index = next(self._internal_iter)
+        return self[index]
 
 
 class IterableDataset(Dataset):

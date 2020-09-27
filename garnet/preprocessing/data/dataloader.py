@@ -103,6 +103,23 @@ class DataLoader(object):
         else:
             return MultiProcessIterableDataIterator(self)
 
+    def __next__(self):
+        if getattr(self, '_internal_iter', None) is None:
+            self._internal_iter = self.__iter__()
+        try:
+            data = next(self._internal_iter)
+        except StopIteration:
+            self._internal_iter = self.__iter__()
+            data = next(self._internal_iter)
+        print(data[0][0][:, 0])
+        return data
+
+    def infinite_iter(self):
+        while True:
+            for data in self.__iter__():
+                print(data[0][0][:, 0])
+                yield data
+
     @property
     def auto_batch(self):
         return self.batch_sampler is not None
@@ -110,6 +127,19 @@ class DataLoader(object):
     @property
     def index_sampler(self):
         return self.batch_sampler if self.auto_batch else self.sampler
+
+    def __len__(self):
+        if hasattr(self.dataset, '__len__'):
+            data_length = len(self.dataset)
+            if self.batch_size:
+                if self.drop_last:
+                    return data_length // self.batch_size
+                else:
+                    return (data_length + self.batch_size - 1) // self.batch_size
+            else:
+                return data_length
+        raise TypeError('dataset of this DataLoader is may be IterableDataset, which does not contain `__len__`'.format(
+            type(self.dataset)))
 
 
 class BaseDataIterator(object):
@@ -164,23 +194,21 @@ class SingleProcessDataIterator(BaseDataIterator):
 
 
 class _MPAssistantIterator(object):
-    def __init__(self, dataset, collator):
+    def __init__(self, dataset):
         self.dataset = dataset
-        self.collator = collator
 
     def __iter__(self):
         return self
 
     def __next__(self):
-        data = next(self.dataset)
-        return self.collator.collate_fn(data)
+        return next(self.dataset)
 
 
 class MultiProcessIterableDataIterator(BaseDataIterator):
     def __init__(self, data_loader):
         super().__init__(data_loader)
 
-        generator = _MPAssistantIterator(self.dataset, self.collator)
+        generator = _MPAssistantIterator(self.dataset)
         self.enqueuer = GeneratorEnqueuer(generator, use_multiprocessing=True)
         self.enqueuer.start(workers=self.num_workers, max_queue_size=self.queue_size)
         self.output_generator = self.enqueuer.get()
@@ -204,4 +232,4 @@ class MultiProcessIterableDataIterator(BaseDataIterator):
 
         if len(data) == 0 or (self.drop_last and len(data) < len(batch_indices)):
             raise StopIteration
-        return data
+        return self.collator.collate_fn(data)
