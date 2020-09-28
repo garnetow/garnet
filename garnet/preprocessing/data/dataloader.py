@@ -111,7 +111,6 @@ class DataLoader(object):
         except StopIteration:
             self._internal_iter = self.__iter__()
             data = next(self._internal_iter)
-        print(data[0][0][:, 0])
         return data
 
     def infinite_iter(self):
