@@ -12,7 +12,7 @@ from keras.utils import GeneratorEnqueuer
 from .dataset import Dataset, DatasetKind
 from .sampler import Sampler, BatchSampler, InfiniteStreamSampler, SequentialSampler, RandomSampler
 from .collator import Collator, SingleSampleCollator, BatchSampleCollator
-from .fetcher import MappingFetcher, IterableFetcher
+from .fetcher import MappingFetcher, IterableFetcher, IterableBufferFetcher
 
 
 class DataLoader(object):
@@ -104,6 +104,8 @@ class DataLoader(object):
             return MultiProcessIterableDataIterator(self)
 
     def __next__(self):
+        r""":class:`DataLoader` is an infinite iterator
+        """
         if getattr(self, '_internal_iter', None) is None:
             self._internal_iter = self.__iter__()
         try:
@@ -173,14 +175,17 @@ class BaseDataIterator(object):
 class SingleProcessDataIterator(BaseDataIterator):
     def __init__(self, data_loader):
         super().__init__(data_loader)
-        self.fetcher = MappingFetcher(self.dataset, self._auto_batch, self.collator, self.drop_last) \
-            if self._dataset_kind == DatasetKind.Map else \
-            IterableFetcher(self.dataset, self._auto_batch, self.collator, self.drop_last)
-        self._num_yielded = 0
+        if self._dataset_kind == DatasetKind.Map:
+            self.fetcher = MappingFetcher(self.dataset, self._auto_batch, self.collator, self.drop_last)
+        elif self._dataset_kind == DatasetKind.Iterable:
+            if self.shuffle:
+                self.fetcher = IterableBufferFetcher(self.dataset, self._auto_batch, self.collator,
+                                                     self.drop_last, buffer_size=self.queue_size)
+            else:
+                self.fetcher = IterableFetcher(self.dataset, self._auto_batch, self.collator, self.drop_last)
 
     def __next__(self):
         data = self._next_data()
-        self._num_yielded += 1
         return data
 
     def __len__(self):

@@ -26,7 +26,7 @@ class Dataset(object):
     kind = DatasetKind.Unspecified
 
     def __iter__(self):
-        raise self
+        return self
 
     def __next__(self):
         raise NotImplementedError
@@ -56,10 +56,10 @@ class MappingDataset(Dataset):
             self._internal_iter = iter(range(len(self)))
         try:
             index = next(self._internal_iter)
+            return self[index]
         except StopIteration:
             self._internal_iter = iter(range(len(self)))
-            index = next(self._internal_iter)
-        return self[index]
+            raise StopIteration
 
 
 class IterableDataset(Dataset):
@@ -73,12 +73,15 @@ class IterableDataset(Dataset):
     def iter(self):
         raise NotImplementedError
 
-    def __iter__(self):
-        self._iterator = self.iter()
-        return self
-
     def __next__(self):
-        return next(self._iterator)
+        if getattr(self, '_internal_iter', None) is None:
+            self._internal_iter = self.iter()
+        try:
+            data = next(self._internal_iter)
+            return data
+        except StopIteration:
+            self._internal_iter = self.iter()
+            raise StopIteration
 
 
 class MatrixDataset(MappingDataset):
