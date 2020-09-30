@@ -33,7 +33,11 @@ class PositionEmbedding(Layer):
                                           initializer=self.embeddings_initializer)
         super().build(input_shape)
 
-    def call(self, inputs, custom_position_ids=None, **kwargs):
+    def call(self, inputs, **kwargs):
+        custom_position_ids = None
+        if isinstance(inputs, list) and len(inputs) == 2:
+            inputs, custom_position_ids = inputs
+
         if custom_position_ids is None:
             input_shape = K.shape(inputs)
             batch_size, seq_length = input_shape[0], input_shape[1]
@@ -50,4 +54,20 @@ class PositionEmbedding(Layer):
             return K.concatenate([inputs, pos_embeddeing], axis=0)
 
     def compute_output_shape(self, input_shape):
-        pass
+        if isinstance(input_shape, list) and len(input_shape) == 2:
+            input_shape, custom_shape = input_shape
+
+        if self.merge_mode == 'add':
+            return input_shape
+        else:
+            return input_shape[:2] + (input_shape[2] + self.output_dim,)
+
+    def get_config(self):
+        config = {
+            'input_dim': self.input_dim,
+            'output_dim': self.output_dim,
+            'merge_mode': self.merge_mode,
+            'embeddings_initializer': keras.initializers.serialize(self.embeddings_initializer),
+        }
+        base_config = super(PositionEmbedding, self).get_config()
+        return dict(list(base_config.items()) + list(config.items()))

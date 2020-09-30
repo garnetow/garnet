@@ -13,6 +13,7 @@ from keras.models import Model
 from keras.layers import Input, Dense, Dropout, Embedding, Add
 
 from .model import WrappedModel
+from ..layers import PositionEmbedding
 
 
 class Transformer(WrappedModel):
@@ -379,3 +380,13 @@ class Bert(Transformer):
                 name='Embedding-Token-Segment',
             )
 
+        # apply position embedding
+        x = self.apply(
+            inputs=[x, p] if p is not None else x,
+            layer=PositionEmbedding,
+            input_dim=self.max_position_embeddings,
+            output_dim=self.embedding_size,
+            merge_mode='add',
+            embeddings_initializer=self.initializer,
+            name='Embedding-Position',
+        )
