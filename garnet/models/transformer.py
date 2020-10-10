@@ -186,8 +186,6 @@ class Transformer(WrappedModel):
         :param name: name of the layer.
         :param kwargs: parameters delivered to layer initialization.
         """
-        if layer is Dropout and kwargs.get('rate', 0.) == 0:
-            return inputs
 
         arguments = arguments or dict()
         name = self.add_prefix(name)
@@ -350,14 +348,13 @@ class Bert(Transformer):
             else:
                 inputs.append(additional_inputs)
 
-    '''
-    layer_norm_cond_inputs=layer_norm_cond_inputs,
-    layer_norm_cond_hidden_size=layer_norm_cond_hidden_size,
-    layer_norm_cond_hidden_act=layer_norm_cond_hidden_act,
-    '''
-
-    def apply_embeddings(self, inputs, input_embeds=None, custom_position_ids=None,
-                         layer_norm_cond_inputs=None, layer_norm_cond_hidden_size=None, layer_norm_cond_hidden_act=None,
+    def apply_embeddings(self,
+                         inputs,
+                         input_embeds=None,
+                         custom_position_ids=None,
+                         layer_norm_cond_inputs=None,
+                         layer_norm_cond_hidden_size=None,
+                         layer_norm_cond_hidden_act=None,
                          **kwargs):
         if input_embeds is not None:
             x = input_embeds
@@ -417,12 +414,13 @@ class Bert(Transformer):
         )
 
         # apply dropout
-        x = self.apply(
-            inputs=x,
-            layer=Dropout,
-            rate=self.hidden_dropout_prob,
-            name='Embedding-Dropout'
-        )
+        if self.hidden_dropout_prob:
+            x = self.apply(
+                inputs=x,
+                layer=Dropout,
+                rate=self.hidden_dropout_prob,
+                name='Embedding-Dropout'
+            )
 
         # apply hidden size projection
         if self.embedding_size != self.hidden_size:
@@ -435,3 +433,28 @@ class Bert(Transformer):
             )
 
         return x
+
+    def apply_main_layers(self,
+                          inputs,
+                          index,
+                          attention_mask=None,
+                          head_mask=None,
+                          encoder_hidden_context=None,
+                          encode_attention_mask=None,
+                          layer_norm_cond_inputs=None,
+                          layer_norm_cond_hidden_size=None,
+                          layer_norm_cond_hidden_act=None,
+                          **kwargs):
+        r"""Each single layer in transformer is based on `Self-attention` layer.
+
+        In each layer, tensors flow in the following order:
+        Attention -> Add -> Layer Normalization -> Feed Forward -> Add -> Layer Normalization
+
+        :param inputs: embedding inputs
+        :param index: index of this layer
+        """
+
+        x = inputs
+
+        attention_name = 'Transformer-{}-MultiHeadSelfAttention'.format(index)
+        feed_forward_name = 'Transformer-{}-FeedForward'.format(index)
