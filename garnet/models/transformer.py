@@ -13,6 +13,8 @@ from keras.models import Model
 from keras.layers import Input, Dense, Dropout, Embedding, Add
 
 from .model import WrappedModel
+from ..layers.position import PositionEmbedding
+from ..layers.layer_normalization import LayerNormalization
 
 
 class Transformer(WrappedModel):
@@ -141,6 +143,9 @@ class Transformer(WrappedModel):
             inputs,
             input_embeds=input_embeds,
             custom_position_ids=custom_position_ids,
+            layer_norm_cond_inputs=layer_norm_cond_inputs,
+            layer_norm_cond_hidden_size=layer_norm_cond_hidden_size,
+            layer_norm_cond_hidden_act=layer_norm_cond_hidden_act,
             **kwargs
         )
 
@@ -181,6 +186,8 @@ class Transformer(WrappedModel):
         :param name: name of the layer.
         :param kwargs: parameters delivered to layer initialization.
         """
+        if layer is Dropout and kwargs.get('rate', 0.) == 0:
+            return inputs
 
         arguments = arguments or dict()
         name = self.add_prefix(name)
@@ -343,7 +350,15 @@ class Bert(Transformer):
             else:
                 inputs.append(additional_inputs)
 
-    def apply_embeddings(self, inputs, input_embeds=None, custom_position_ids=None, **kwargs):
+    '''
+    layer_norm_cond_inputs=layer_norm_cond_inputs,
+    layer_norm_cond_hidden_size=layer_norm_cond_hidden_size,
+    layer_norm_cond_hidden_act=layer_norm_cond_hidden_act,
+    '''
+
+    def apply_embeddings(self, inputs, input_embeds=None, custom_position_ids=None,
+                         layer_norm_cond_inputs=None, layer_norm_cond_hidden_size=None, layer_norm_cond_hidden_act=None,
+                         **kwargs):
         if input_embeds is not None:
             x = input_embeds
         else:
@@ -379,3 +394,44 @@ class Bert(Transformer):
                 name='Embedding-Token-Segment',
             )
 
+        # apply position embedding
+        x = self.apply(
+            inputs=x if p is None else [x, p],
+            layer=PositionEmbedding,
+            input_dim=self.max_position_embeddings,
+            output_dim=self.embedding_size,
+            merge_mode='add',
+            embeddings_initializer=self.initializer,
+            name='Embedding-Position',
+        )
+
+        # apply layer normalization
+        x = self.apply(
+            inputs=x if layer_norm_cond_inputs is None else [x, layer_norm_cond_inputs],
+            layer=LayerNormalization,
+            conditional=layer_norm_cond_inputs is not None,
+            cond_hidden_units=layer_norm_cond_hidden_size,
+            cond_hidden_activation=layer_norm_cond_hidden_act,
+            cond_hidden_initializer=self.initializer,
+            name='Embedding-Norm'
+        )
+
+        # apply dropout
+        x = self.apply(
+            inputs=x,
+            layer=Dropout,
+            rate=self.hidden_dropout_prob,
+            name='Embedding-Dropout'
+        )
+
+        # apply hidden size projection
+        if self.embedding_size != self.hidden_size:
+            x = self.apply(
+                inputs=x,
+                layer=Dense,
+                units=self.hidden_size,
+                kernel_initializer=self.initializer,
+                name='Embedding-Mapping'
+            )
+
+        return x
