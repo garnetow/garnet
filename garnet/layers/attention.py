@@ -7,6 +7,7 @@
 """
 
 import keras
+import tensorflow as tf
 import keras.backend as K
 from keras.layers import Layer, Dense
 
@@ -126,12 +127,48 @@ class MultiHeadAttention(Layer):
 
     def call(self,
              inputs,
+             query_mask=None,
+             value_mask=None,
              attention_mask=None,  # (batch_size, query_length, key_length)
              head_mask=None,  # (num_heads,) or (num_layers, num_heads)
              encoder_hidden_context=None,
              encode_attention_mask=None,
              **kwargs):
+        """
+        q: (batch_size, query_seq_len, hidden_query)
+        k: (batch_size, key_seq_len, hidden_key)
+        v: (batch_size, key_seq_len, hidden_value)
+        """
         if isinstance(inputs, list):
             q, k, v = inputs
         else:
             q = k = v = inputs
+
+        if query_mask is not None:
+            query_mask = K.cast(query_mask, dtype=K.floatx())
+        if value_mask is not None:
+            value_mask = K.cast(value_mask, dtype=K.floatx())
+
+        # linear transformation
+        qw = self.q_proj(q)  # (batch_size, query_seq_len, head_num * key_size)
+        kw = self.k_proj(k)  # (batch_size, key_seq_len, head_num * key_size)
+        vw = self.v_proj(v)  # (batch_size, key_seq_len, head_num * head_size)
+
+        # shape transposing for calculating score
+        qw = K.reshape(
+            qw,
+            (-1, K.shape(q)[1], self.head_num, self.key_size)
+        )  # (batch_size, query_seq_len, head_num, key_size)
+        kw = K.reshape(
+            kw,
+            (-1, K.shape(k)[1], self.head_num, self.key_size)
+        )  # (batch_size, key_seq_len, head_num, key_size)
+        vw = K.reshape(
+            vw,
+            (-1, K.shape(v)[1], self.head_num, self.head_size)
+        )  # (batch_size, key_seq_len, head_num, head_size)
+
+        # calculate attention scores(scale-dot method)
+        a = tf.einsum('bjhd,bkhd->bhjk', qw, kw)  # (batch_size, head_num, query_seq_len, key_seq_len)
+        if self.attention_scale:
+            a = a / (self.key_size ** 0.5)
