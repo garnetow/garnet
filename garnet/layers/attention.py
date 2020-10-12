@@ -11,18 +11,7 @@ import tensorflow as tf
 import keras.backend as K
 from keras.layers import Layer, Dense
 
-"""
-def __init__(
-        self,
-        heads,
-        head_size,
-        key_size=None,
-        use_bias=True,
-        attention_scale=True,
-        kernel_initializer='glorot_uniform',
-        **kwargs
-    ):
-"""
+from ..backend.mask import sequence_masking
 
 
 class MultiHeadAttention(Layer):
@@ -63,7 +52,7 @@ class MultiHeadAttention(Layer):
 
         self.head_num = head_num
         self.head_size = head_size
-        self.output_dim = head_size * head_num if head_size else None
+        self.output_dim = head_size * head_num
         self.key_size = key_size or head_size
         self.use_bias = use_bias
         self.attention_scale = attention_scale
@@ -130,7 +119,7 @@ class MultiHeadAttention(Layer):
              query_mask=None,
              value_mask=None,
              attention_mask=None,  # (batch_size, query_length, key_length)
-             head_mask=None,  # (num_heads,) or (num_layers, num_heads)
+             head_mask=None,  # (num_heads,)
              encoder_hidden_context=None,
              encode_attention_mask=None,
              **kwargs):
@@ -172,3 +161,69 @@ class MultiHeadAttention(Layer):
         a = tf.einsum('bjhd,bkhd->bhjk', qw, kw)  # (batch_size, head_num, query_seq_len, key_seq_len)
         if self.attention_scale:
             a = a / (self.key_size ** 0.5)
+
+        # apply value sequence mask
+        a = sequence_masking(a, value_mask, mode='add', axis=-1)
+
+        # apply attention mask
+        if attention_mask is not None:
+            att_mask_dim = K.ndim(attention_mask)
+            if att_mask_dim == 3:
+                attention_mask = K.expand_dims(attention_mask, axis=1)
+            a -= (1 - attention_mask) * 1e12
+
+        # apply softmax on each query sequence steps
+        a = K.softmax(a, axis=-1)
+
+        # apply head mask
+        if head_mask is not None:
+            # head_mask with shape (num_heads,)
+            head_mask = K.expand_dims(K.expand_dims(K.expand_dims(head_mask, axis=0), axis=-1), axis=-1)
+            a = a * head_mask
+
+        # get output
+        o = tf.einsum('bhjk,bkhd->bjhd', a, vw)  # (batch_size, query_seq_len, head_num, head_size)
+        o = K.reshape(o, shape=(-1, K.shape(o)[1], self.output_dim))  # (batch_size, query_seq_len, head_num*head_size)
+        o = self.o_proj(o)
+
+        # apply query sequence mask
+        o = sequence_masking(o, query_mask, mode='mul', axis=1)
+        return o
+
+    def compute_output_shape(self, input_shape):
+        if isinstance(input_shape, list):
+            batch_size, sequence_length = input_shape[0][0], input_shape[0][1]
+        else:
+            batch_size, sequence_length = input_shape[0], input_shape[1]
+        return batch_size, sequence_length, self.output_dim
+
+    def compute_mask(self, inputs, mask=None):
+        if isinstance(mask, list):
+            return mask[0]
+        return mask
+
+    def get_config(self):
+        config = {
+            'head_num': self.head_num,
+            'head_size': self.head_size,
+            'output_dim': self.output_dim,
+            'key_size': self.key_size,
+            'use_bias': self.use_bias,
+            'attention_scale': self.attention_scale,
+            'activation': keras.activations.serialize(self.activation),
+            'kernel_initializer': keras.initializers.serialize(self.kernel_initializer),
+            'bias_initializer': keras.initializers.serialize(self.bias_initializer),
+            'kernel_regularizer': keras.regularizers.serialize(self.kernel_regularizer),
+            'bias_regularizer': keras.regularizers.serialize(self.bias_regularizer),
+            'kernel_constraint': keras.constraints.serialize(self.kernel_constraint),
+            'bias_constraint': keras.constraints.serialize(self.bias_constraint),
+        }
+        base_config = super(MultiHeadAttention, self).get_config()
+        return dict(list(base_config.items()) + list(config.items()))
+
+
+custom_objects = {
+    'MultiHeadAttention': MultiHeadAttention,
+}
+
+keras.utils.get_custom_objects().update(custom_objects)

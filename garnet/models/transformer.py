@@ -15,6 +15,8 @@ from keras.layers import Input, Dense, Dropout, Embedding, Add
 from .model import WrappedModel
 from ..layers.position import PositionEmbedding
 from ..layers.layer_normalization import LayerNormalization
+from ..layers.attention import MultiHeadAttention
+from ..layers.feedforward import FeedForward
 
 
 class Transformer(WrappedModel):
@@ -290,6 +292,11 @@ class Transformer(WrappedModel):
     def initializer(self):
         return keras.initializers.TruncatedNormal(stddev=0.02)
 
+    def compute_attention_mask(self, inputs=None, **kwargs):
+        r"""Calculate attention mask
+        """
+        return None
+
 
 class Bert(Transformer):
     def __init__(self,
@@ -458,3 +465,86 @@ class Bert(Transformer):
 
         attention_name = 'Transformer-{}-MultiHeadSelfAttention'.format(index)
         feed_forward_name = 'Transformer-{}-FeedForward'.format(index)
+
+        if attention_mask is None:
+            attention_mask = self.compute_attention_mask(inputs, index=index, **kwargs)
+
+        attention_args = {
+            'head_mask': head_mask,
+            'attention_mask': attention_mask,
+            'encoder_hidden_context': encoder_hidden_context,
+            'encode_attention_mask': encode_attention_mask,
+        }
+
+        # apply self-attention
+        xt = self.apply(
+            inputs=[x, x, x],
+            layer=MultiHeadAttention,
+            head_num=self.num_attention_heads,
+            head_size=self.attention_head_size,
+            kernel_initializer=self.initializer,
+            arguments=attention_args,
+            name=attention_name,
+        )
+
+        if self.attention_dropout_prob:
+            xt = self.apply(
+                inputs=xt,
+                layer=Dropout,
+                rate=self.attention_dropout_prob,
+                name='{}-Dropout'.format(attention_name),
+            )
+
+        x = self.apply(
+            inputs=[x, xt],
+            layer=Add,
+            name='{}-Add'.format(attention_name),
+        )
+
+        # apply layer normalization
+        x = self.apply(
+            inputs=x if layer_norm_cond_inputs is None else [x, layer_norm_cond_inputs],
+            layer=LayerNormalization,
+            conditional=layer_norm_cond_inputs is not None,
+            cond_hidden_units=layer_norm_cond_hidden_size,
+            cond_hidden_activation=layer_norm_cond_hidden_act,
+            cond_hidden_initializer=self.initializer,
+            name='{}-Norm'.format(attention_name),
+        )
+
+        # apply feed-forward
+        xt = self.apply(
+            inputs=x,
+            layer=FeedForward,
+            units=self.intermediate_size,
+            dropout_rate=self.hidden_dropout_prob,
+            activation=self.hidden_act,
+            kernel_initializer=self.initializer,
+            name=feed_forward_name,
+        )
+        if self.hidden_dropout_prob:
+            xt = self.apply(
+                inputs=xt,
+                layer=Dropout,
+                rate=self.hidden_dropout_prob,
+                name='{}-Dropout'.format(feed_forward_name),
+            )
+
+        x = self.apply(
+            inputs=[x, xt],
+            layer=Add,
+            name='{}-Add'.format(feed_forward_name),
+        )
+
+        # apply layer normalization
+        x = self.apply(
+            inputs=x if layer_norm_cond_inputs is None else [x, layer_norm_cond_inputs],
+            layer=LayerNormalization,
+            conditional=layer_norm_cond_inputs is not None,
+            cond_hidden_units=layer_norm_cond_hidden_size,
+            cond_hidden_activation=layer_norm_cond_hidden_act,
+            cond_hidden_initializer=self.initializer,
+            name='{}-Norm'.format(feed_forward_name),
+        )
+
+        return x
