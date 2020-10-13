@@ -10,13 +10,15 @@ import keras
 import tensorflow as tf
 import keras.backend as K
 from keras.models import Model
-from keras.layers import Input, Dense, Dropout, Embedding, Add
+from keras.layers import Input, Dense, Dropout, Add, Lambda, Activation
 
 from .model import WrappedModel
+from ..layers.core import BiasAdd
 from ..layers.position import PositionEmbedding
 from ..layers.layer_normalization import LayerNormalization
 from ..layers.attention import MultiHeadAttention
 from ..layers.feedforward import FeedForward
+from ..layers.embedding import DenseEmbedding
 
 
 class Transformer(WrappedModel):
@@ -277,9 +279,8 @@ class Transformer(WrappedModel):
                 saver = tf.train.Saver()
                 saver.save(sess, filename)
 
-    @staticmethod
     def load_variable(self, checkpoint, name):
-        r"""Load weight of single variable.
+        r"""Load the weight of a single variable.
         """
         return tf.train.load_variable(checkpoint, name)
 
@@ -327,6 +328,8 @@ class Bert(Transformer):
         self.with_nsp = with_nsp
         self.with_mlm = with_mlm
         self.shared_segment_embeddings = shared_segment_embeddings
+        if self.with_nsp:
+            self.with_pool = True
 
     def get_inputs(self,
                    input_embeds=None,
@@ -369,7 +372,7 @@ class Bert(Transformer):
             x = inputs.pop(0)
             x = self.apply(
                 inputs=x,
-                layer=Embedding,
+                layer=DenseEmbedding,
                 input_dim=self.vocab_size,
                 output_dim=self.embedding_size,
                 embeddings_initializer=self.initializer,
@@ -386,7 +389,7 @@ class Bert(Transformer):
             name = 'Embedding-Token' if self.shared_segment_embeddings else 'Embedding-Segment'
             s = self.apply(
                 inputs=s,
-                layer=Embedding,
+                layer=DenseEmbedding,
                 input_dim=self.segment_vocab_size,
                 output_dim=self.embedding_size,
                 embeddings_initializer=self.initializer,
@@ -548,3 +551,159 @@ class Bert(Transformer):
         )
 
         return x
+
+    def apply_output_layers(self,
+                            inputs,
+                            layer_norm_cond_inputs=None,
+                            layer_norm_cond_hidden_size=None,
+                            layer_norm_cond_hidden_act=None,
+                            **kwargs):
+        outputs = [inputs]
+
+        if self.with_pool:  # add [CLS] vector into output list
+            x = self.apply(
+                inputs=inputs,
+                layer=Lambda,
+                function=lambda xt: xt[:, 0],
+                name='Pooler',
+            )
+            x = self.apply(
+                inputs=x,
+                layer=Dense,
+                units=self.hidden_size,
+                activation='tanh',
+                kernel_initializer=self.initializer,
+                name='Pooler-Dense',
+            )
+
+            if self.with_nsp:  # add Next Sentence Prediction prediction probabilities into output list
+                x = self.apply(
+                    inputs=x,
+                    layer=Dense,
+                    units=2,
+                    activation='softmax',
+                    kernel_initializer=self.initializer,
+                    name='NSP-Proba',
+                )
+            outputs.append(x)
+
+        if self.with_mlm:  # add Masked Language Model prediction probabilities into output list
+            x = self.apply(
+                inputs=inputs,
+                layer=Dense,
+                units=self.embedding_size,
+                activation=self.hidden_act,
+                kernel_initializer=self.initializer,
+                name='MLM-Dense',
+            )
+
+            x = self.apply(
+                inputs=x if layer_norm_cond_inputs is None else [x, layer_norm_cond_inputs],
+                layer=LayerNormalization,
+                conditional=layer_norm_cond_inputs is not None,
+                cond_hidden_units=layer_norm_cond_hidden_size,
+                cond_hidden_activation=layer_norm_cond_hidden_act,
+                cond_hidden_initializer=self.initializer,
+                name='MLM-Norm',
+            )
+
+            # get token probabilities for each step
+            x = self.apply(
+                inputs=x,
+                layer=DenseEmbedding,
+                arguments={'mode': 'dense'},
+                name='Embedding-Token'
+            )
+            x = self.apply(
+                inputs=x,
+                layer=BiasAdd,
+                name='MLM-Bias',
+            )
+            x = self.apply(
+                inputs=x,
+                layer=Activation,
+                activation='softmax',
+                name='MLM-Activation'
+            )
+            outputs.append(x)
+
+        if len(outputs) == 1:
+            return outputs[0]
+        return outputs
+
+    def load_variable(self, checkpoint, name):
+        variable = super(Bert, self).load_variable(checkpoint, name)
+        if name == 'cls/seq_relationship/output_weights':
+            return variable.T
+        else:
+            return variable
+
+    def create_variable(self, name, value):
+        if name == 'cls/seq_relationship/output_weights':
+            value = value.T
+        return super(Bert, self).create_variable(name, value)
+
+    def variable_mapping(self):
+        r"""Map standard weight with weight in current class.
+        """
+        mapping = {
+            'Embedding-Token': ['bert/embeddings/word_embeddings'],
+            'Embedding-Segment': ['bert/embeddings/token_type_embeddings'],
+            'Embedding-Position': ['bert/embeddings/position_embeddings'],
+            'Embedding-Norm': [
+                'bert/embeddings/LayerNorm/beta',
+                'bert/embeddings/LayerNorm/gamma',
+            ],
+            'Embedding-Mapping': [
+                'bert/encoder/embedding_hidden_mapping_in/kernel',
+                'bert/encoder/embedding_hidden_mapping_in/bias',
+            ],
+            'Pooler-Dense': [
+                'bert/pooler/dense/kernel',
+                'bert/pooler/dense/bias',
+            ],
+            'NSP-Proba': [
+                'cls/seq_relationship/output_weights',
+                'cls/seq_relationship/output_bias',
+            ],
+            'MLM-Dense': [
+                'cls/predictions/transform/dense/kernel',
+                'cls/predictions/transform/dense/bias',
+            ],
+            'MLM-Norm': [
+                'cls/predictions/transform/LayerNorm/beta',
+                'cls/predictions/transform/LayerNorm/gamma',
+            ],
+            'MLM-Bias': ['cls/predictions/output_bias'],
+        }
+
+        for i in range(self.num_hidden_layers):
+            prefix = 'bert/encoder/layer_%d/' % i
+            mapping.update({
+                'Transformer-%d-MultiHeadSelfAttention' % i: [
+                    prefix + 'attention/self/query/kernel',
+                    prefix + 'attention/self/query/bias',
+                    prefix + 'attention/self/key/kernel',
+                    prefix + 'attention/self/key/bias',
+                    prefix + 'attention/self/value/kernel',
+                    prefix + 'attention/self/value/bias',
+                    prefix + 'attention/output/dense/kernel',
+                    prefix + 'attention/output/dense/bias',
+                ],
+                'Transformer-%d-MultiHeadSelfAttention-Norm' % i: [
+                    prefix + 'attention/output/LayerNorm/beta',
+                    prefix + 'attention/output/LayerNorm/gamma',
+                ],
+                'Transformer-%d-FeedForward' % i: [
+                    prefix + 'intermediate/dense/kernel',
+                    prefix + 'intermediate/dense/bias',
+                    prefix + 'output/dense/kernel',
+                    prefix + 'output/dense/bias',
+                ],
+                'Transformer-%d-FeedForward-Norm' % i: [
+                    prefix + 'output/LayerNorm/beta',
+                    prefix + 'output/LayerNorm/gamma',
+                ],
+            })
+
+        return mapping
