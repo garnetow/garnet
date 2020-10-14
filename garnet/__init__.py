@@ -5,3 +5,5 @@
 @Author : garnet
 @Time   : 2020/8/12 9:14
 """
+
+from . import losses

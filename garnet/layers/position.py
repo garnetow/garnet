@@ -22,6 +22,8 @@ class PositionEmbedding(Layer):
                  embeddings_initializer='zeros',
                  **kwargs):
         super().__init__(**kwargs)
+        self.supports_masking = True
+
         self.input_dim = input_dim
         self.output_dim = output_dim
         self.merge_mode = merge_mode

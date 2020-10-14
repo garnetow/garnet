@@ -221,6 +221,8 @@ class Transformer(WrappedModel):
             inputs = []
         elif not isinstance(inputs, list):
             inputs = [inputs]
+
+        inputs = inputs[:]  # shallow copy
         self.inputs = inputs
 
         if len(inputs) > 1:
@@ -231,6 +233,8 @@ class Transformer(WrappedModel):
     def set_outputs(self, outputs):
         if not isinstance(outputs, list):
             outputs = [outputs]
+
+        outputs = outputs[:]  # shallow copy
         self.outputs = outputs
 
         if len(outputs) > 1:
@@ -357,6 +361,7 @@ class Bert(Transformer):
                 inputs.extend(additional_inputs)
             else:
                 inputs.append(additional_inputs)
+        return inputs
 
     def apply_embeddings(self,
                          inputs,
@@ -366,6 +371,8 @@ class Bert(Transformer):
                          layer_norm_cond_hidden_size=None,
                          layer_norm_cond_hidden_act=None,
                          **kwargs):
+        inputs = inputs[:]  # shallow copy
+
         if input_embeds is not None:
             x = input_embeds
         else:
