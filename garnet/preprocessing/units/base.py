@@ -26,8 +26,8 @@ class StatefulUnit(Unit, metaclass=abc.ABCMeta):
     def __init__(self, *args, **kwargs):
         self.fitted = False
 
-    def fit(self, inputs, *args, **kwargs):
+    def fit(self, *args, **kwargs):
         self.fitted = True
 
-    def reverse_transform(self, inputs, *args, **kwargs):
+    def reverse_transform(self, *args, **kwargs):
         ...

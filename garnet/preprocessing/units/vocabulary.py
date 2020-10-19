@@ -42,6 +42,7 @@ class Vocabulary(StatefulUnit):
         self._token_pad = token_pad if isinstance(token_pad, str) else PAD if token_pad else None
         self._token_mask = token_mask if isinstance(token_mask, str) else MASK if token_mask else None
         self._token_unk = token_unknown if isinstance(token_unknown, str) else UNK if token_unknown else None
+        self._special_tokens = None
         self.update_special_set()
 
         self._vocab = dict()
@@ -171,6 +172,17 @@ class Vocabulary(StatefulUnit):
 
         self.vocab = vocab
 
+    def init_with_vocab_file(self, vocab_path, encoding='utf-8', special_tokens=None):
+        path = pathlib.Path(vocab_path)
+        with open(path, 'r', encoding=encoding) as f:
+            vocab = {token.strip(): i for i, token in enumerate(f.readline())}
+
+        for token in special_tokens:
+            if token not in vocab:
+                vocab[token] = len(vocab)
+
+        self.vocab = vocab
+
     def to_txt(self, file_path):
         sequential_tokens = list(zip(*sorted(self._vocab.items(), key=lambda x: x[1], reverse=False)))[0]
         safe_save(file_path, '\n'.join(sequential_tokens), suffix='txt')
@@ -230,6 +242,19 @@ class Vocabulary(StatefulUnit):
         instance.vocab = vocab
         return instance
 
+    def fit(self,
+            tokens=None,
+            corpus_path=None,
+            vocab_path=None,
+            encoding='utf-8',
+            special_tokens=None):
+        if tokens is not None:
+            self.init_with_tokens(tokens, special_tokens=special_tokens)
+        elif vocab_path is not None:
+            self.init_with_vocab_file(vocab_path, encoding=encoding, special_tokens=special_tokens)
+        else:
+            raise NotImplementedError("Unsupported method initializing a `Vocabulary` instance.")
+
 
 class BertVocabulary(Vocabulary):
     def __init__(self,
@@ -251,6 +276,9 @@ class BertVocabulary(Vocabulary):
             **kwargs
         )
 
+        self.cls_token = CLS
+        self.sep_token = SEP
+
         if vocab_path is not None:
             self.init_vocab(vocab_path, encoding=encoding, simplified=simplified, special_tokens=special_tokens)
 
@@ -263,7 +291,7 @@ class BertVocabulary(Vocabulary):
                     if token not in vocab:
                         if len(token) > 1:
                             if all([True if not is_cjk_character(char) and not is_punctuation_character(char) else False
-                                    for char in self._stem(token)]):
+                                    for char in self.stem(token)]):
                                 vocab[token] = len(vocab)
                         else:
                             vocab[token] = len(vocab)
@@ -280,7 +308,11 @@ class BertVocabulary(Vocabulary):
         self.fitted = True
 
     @staticmethod
-    def _stem(token):
+    def stem(token):
         r"""If token is start with `##`, remove it from token.
         """
         return token[2:] if token[:2] == '##' else token
+
+    @staticmethod
+    def is_special_token(token):
+        return bool(token) and (token[0] == '[') and (token[-1] == ']')
