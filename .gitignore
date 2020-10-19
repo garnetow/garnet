@@ -132,7 +132,6 @@ dmypy.json
 .idea/
 
 # Test code
-test/
 demo/
 test*
 demo*
