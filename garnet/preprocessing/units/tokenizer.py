@@ -144,8 +144,8 @@ class BertTokenizer(Tokenizer):
     def __init__(self,
                  vocab_path,
                  ignore_case=False,
-                 token_start=SOS,
-                 token_end=EOS,
+                 token_start=CLS,
+                 token_end=SEP,
                  encoding='utf-8',
                  max_length=None,
                  **kwargs):
@@ -337,8 +337,7 @@ class BertTokenizer(Tokenizer):
         return tokens
 
     def _word_piece_tokenize(self, word):
-        """
-        Divide normal word into sub-word.
+        r"""Divide normal word into sub-word.
         """
         if word in self.vocab:
             return [word]
