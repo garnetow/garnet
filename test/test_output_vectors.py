@@ -1,7 +1,7 @@
 # coding: utf-8
 
 """
-@File   : test_bert_model.py
+@File   : test_output_vectors.py
 @Author : garnet
 @Time   : 2020/10/20 14:38
 """
