@@ -14,9 +14,11 @@ from bert4keras.snippets import to_array
 
 from garnet.preprocessing.units.tokenizer import BertTokenizer
 
-config_path = '../demo/chinese_L-12_H-768_A-12/bert_config.json'
-checkpoint_path = '../demo/chinese_L-12_H-768_A-12/bert_model.ckpt'
-dict_path = '../demo/chinese_L-12_H-768_A-12/vocab.txt'
+bert_path = '../demo/chinese_wwm_ext_L-12_H-768_A-12/'
+# bert_path = '../demo/chinese_L-12_H-768_A-12/'
+config_path = bert_path + 'bert_config.json'
+checkpoint_path = bert_path + 'bert_model.ckpt'
+dict_path = bert_path + 'vocab.txt'
 
 
 class BertTestCase(unittest.TestCase):
