@@ -50,7 +50,7 @@ class DenseEmbedding(Embedding):
         if self._current_mode == 'embedding':
             return super(DenseEmbedding, self).compute_output_shape(input_shape)
         else:
-            return input_shape[:-1] + self.input_dim
+            return input_shape[:-1] + (self.input_dim,)
 
 
 custom_objects = {

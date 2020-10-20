@@ -17,7 +17,9 @@ class BiasAdd(Layer):
 
     def __init__(self, initializer='zeros', **kwargs):
         super(BiasAdd, self).__init__(**kwargs)
-        self.initializer = keras.activations.get(initializer)
+        self.supports_masking = True
+
+        self.initializer = keras.initializers.get(initializer)
         self.bias = None
 
     def build(self, input_shape):
@@ -27,7 +29,7 @@ class BiasAdd(Layer):
             shape=(output_dim,),
             initializer=self.initializer,
         )
-        super(Bias, self).build(input_shape)
+        super(BiasAdd, self).build(input_shape)
 
     def call(self, inputs, **kwargs):
         return K.bias_add(inputs, bias=self.bias)
