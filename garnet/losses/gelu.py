@@ -1,7 +1,7 @@
 # coding: utf-8
 
 """
-@File   : losses.py
+@File   : gelu.py
 @Author : garnet
 @Time   : 2020/10/14 17:05
 """
