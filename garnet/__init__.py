@@ -8,3 +8,5 @@
 
 from . import losses
 from . import metrics
+from . import optimizers
+from . import activations
