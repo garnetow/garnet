@@ -309,6 +309,7 @@ class Bert(Transformer):
                  with_pool=False,  # 输出是否增加[CLS]部分
                  with_nsp=False,  # 输出是否增加 Next Sentence Prediction 部分
                  with_mlm=False,  # 输出是否增加 Masked Language Model 部分
+                 pooler_activation='tanh',
                  shared_segment_embeddings=False,  # segment跟token是否共享embedding参数
                  **kwargs):
         r"""Bert model. See more in [Attention is all you need](https://arxiv.org/abs/1706.03762).
@@ -323,6 +324,8 @@ class Bert(Transformer):
             :param with_mlm (:obj:`bool`, optional, default: False):
                 if `True`, outputs including the whole vocabulary probabilities of masked token(`[MASK]`). This also is
                 the output of Masked Language Model.
+            :param pooler_activation (:obj:`str`, optional, default: `tanh`):
+                activation of pooler in output layer.
             :param shared_segment_embeddings (:obj:`bool`, optional, default: False):
                 if `True`, segment tokens share the embedding matrix with normal tokens.
         """
@@ -331,6 +334,7 @@ class Bert(Transformer):
         self.with_pool = with_pool
         self.with_nsp = with_nsp
         self.with_mlm = with_mlm
+        self.pooler_activation = keras.activations.get(pooler_activation)
         self.shared_segment_embeddings = shared_segment_embeddings
         if self.with_nsp:
             self.with_pool = True
@@ -477,7 +481,10 @@ class Bert(Transformer):
         feed_forward_name = 'Transformer-{}-FeedForward'.format(index)
 
         if attention_mask is None:
-            attention_mask = self.compute_attention_mask(inputs, index=index, **kwargs)
+            attention_mask = self.compute_attention_mask(inputs,
+                                                         seg_ids=self.inputs[1],
+                                                         index=index,
+                                                         **kwargs)
 
         attention_args = {
             'head_mask': head_mask,
@@ -578,7 +585,7 @@ class Bert(Transformer):
                 inputs=x,
                 layer=Dense,
                 units=self.hidden_size,
-                activation='tanh',
+                activation=self.pooler_activation,
                 kernel_initializer=self.initializer,
                 name='Pooler-Dense',
             )

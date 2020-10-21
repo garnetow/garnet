@@ -44,3 +44,20 @@ def sequence_masking(seq, mask=None, mode='add', axis=1):
         return seq - (1 - mask) * 1e12
     else:
         raise ValueError("`mode` must one of (`mul`, 'add'), got {} instead".format(mode))
+
+
+def unilm_mask(x):
+    """UniLM attention mask, used for seq2seq model.
+
+    See more at https://arxiv.org/abs/1905.03197.
+
+    Argument:
+        :param x: segment ids with shape (batch_size, seq_length)
+
+    Return:
+        mask tensor with shape (batch_size, seq_length, seq_length, 1)
+    """
+    index = K.cumsum(x, axis=1)
+    mask = index[:, None, :] <= index[:, :, None]
+    mask = K.cast(mask, K.floatx())
+    return mask[:, None]

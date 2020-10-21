@@ -9,6 +9,7 @@
 import json
 
 from .transformer import Bert
+from .unilm import extend_with_unified_language_model
 
 
 def build_transformer_model(
@@ -37,6 +38,9 @@ def build_transformer_model(
     }
 
     Model = model_mapping[model.lower()]
+    if application == 'unilm':
+        Model = extend_with_unified_language_model(Model)
+        configs['pooler_activation'] = 'linear'
 
     transformer = Model(**configs)
     transformer.build(**configs)
