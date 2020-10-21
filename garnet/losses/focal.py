@@ -6,8 +6,9 @@
 @Time   : 2020/10/20 20:18
 """
 
-import tensorflow as tf
+import keras
 import keras.backend as K
+import tensorflow as tf
 
 
 def binary_focal_loss(gamma=2., alpha=.25):
@@ -98,3 +99,11 @@ def categorical_focal_loss(gamma=2., alpha=.25):
         return K.mean(loss, axis=-1)
 
     return categorical_focal_loss_fixed
+
+
+custom_objects = {
+    'binary_focal_loss': binary_focal_loss,
+    'categorical_focal_loss': categorical_focal_loss,
+}
+
+keras.utils.get_custom_objects().update(custom_objects)
