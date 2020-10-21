@@ -118,7 +118,7 @@ class MultiHeadAttention(Layer):
              inputs,
              query_mask=None,
              value_mask=None,
-             attention_mask=None,  # (batch_size, query_length, key_length)
+             attention_mask=None,  # (batch_size, query_length, key_length) or (batch_size, 1, query_length, key_length)
              head_mask=None,  # (num_heads,)
              encoder_hidden_context=None,
              encode_attention_mask=None,

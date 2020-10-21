@@ -17,3 +17,5 @@ from .embedding import DenseEmbedding
 from .feedforward import FeedForward
 
 from .layer_normalization import LayerNormalization
+
+from .simbert import SimBertLoss

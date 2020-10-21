@@ -143,7 +143,7 @@ class Tokenizer(StatefulUnit):
 class BertTokenizer(Tokenizer):
     def __init__(self,
                  vocab_path,
-                 ignore_case=False,
+                 ignore_case=True,
                  token_start=CLS,
                  token_end=SEP,
                  encoding='utf-8',

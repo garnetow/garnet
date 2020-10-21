@@ -29,7 +29,10 @@ def build_transformer_model(
     if 'hidden_dropout_prob' not in configs:
         configs['hidden_dropout_prob'] = 0.
     if 'attention_dropout_prob' not in configs:
-        configs['attention_dropout_prob'] = configs.get('hidden_dropout_prob', 0.)
+        if 'attention_probs_dropout_prob' in configs:
+            configs['attention_dropout_prob'] = configs.get('attention_probs_dropout_prob')
+        else:
+            configs['attention_dropout_prob'] = configs.get('hidden_dropout_prob', 0.)
     if 'segment_vocab_size' not in configs:
         configs['segment_vocab_size'] = configs.get('type_vocab_size', 2)
 

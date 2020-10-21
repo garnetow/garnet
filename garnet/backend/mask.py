@@ -55,7 +55,8 @@ def unilm_mask(x):
         :param x: segment ids with shape (batch_size, seq_length)
 
     Return:
-        mask tensor with shape (batch_size, seq_length, seq_length, 1)
+        mask tensor with shape (batch_size, 1, seq_length, seq_length), and second dimension usually means head nums
+        in Bert-like model.
     """
     index = K.cumsum(x, axis=1)
     mask = index[:, None, :] <= index[:, :, None]
