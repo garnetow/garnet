@@ -10,7 +10,7 @@ import string
 import unicodedata
 
 CJK_PUNCTUATION = '\uff02\uff03\uff04\uff05\uff06\uff07\uff08\uff09\uff0a\uff0b\uff0c\uff0d\uff0f\uff1a\uff1b\uff1c\uff1d\uff1e\uff20\uff3b\uff3c\uff3d\uff3e\uff3f\uff40\uff5b\uff5c\uff5d\uff5e\uff5f\uff60\uff62\uff63\uff64\u3000\u3001\u3003\u3008\u3009\u300a\u300b\u300c\u300d\u300e\u300f\u3010\u3011\u3014\u3015\u3016\u3017\u3018\u3019\u301a\u301b\u301c\u301d\u301e\u301f\u3030\u303e\u303f\u2013\u2014\u2018\u2019\u201b\u201c\u201d\u201e\u201f\u2026\u2027\ufe4f\ufe51\ufe54\u00b7\uff01\uff1f\uff61\u3002'
-string.punctuation
+
 
 def is_space_character(ch):
     r"""Whether input is a space character.
@@ -51,3 +51,28 @@ def is_control_character(ch):
     r"""Whether input is a control character.
     """
     return unicodedata.category(ch) in ('Cc', 'Cf')
+
+
+def text_segment(text: str, max_len: int = -1, seps='\n', strips=None):
+    text = text.strip().strip(strips)
+    if not text:
+        return []
+
+    if seps and len(text) > max_len:
+        sep = seps[0]
+        pieces = text.split(sep)
+        num_pieces = len(pieces)
+        current, segments = '', []
+        for i, p in enumerate(pieces):
+            if current and p and len(current) + len(p) > max_len - 1:
+                # cannot combine former text and current piece together
+                segments.extend(text_segment(current, max_len, seps[1:], strips))
+                current = ''
+
+            current += (p + ('' if i + 1 == num_pieces else sep))
+
+        if current:
+            segments.extend(text_segment(current, max_len, seps[1:], strips))
+        return segments
+    else:
+        return [text]

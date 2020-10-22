@@ -6,6 +6,7 @@
 @Time   : 2020/9/9 14:48
 """
 
+import json
 import numpy as np
 from enum import Enum
 
@@ -124,3 +125,41 @@ class MatrixDataset(MappingDataset):
     @property
     def has_label(self):
         return True if self.labels else False
+
+
+class JsonFileDataset(MappingDataset):
+    def __init__(self, file_path, encoding='utf-8'):
+        self.data = []
+        with open(file_path, 'r', encoding=encoding) as f:
+            for line in f:
+                try:
+                    sample = json.loads(line.strip())
+                    self.data.append(sample)
+                except json.decoder.JSONDecodeError:
+                    pass
+
+    def __len__(self):
+        return len(self.data)
+
+    def __getitem__(self, index):
+        return self.data[index]
+
+    @property
+    def keys(self):
+        return list(self.data[0].keys()) if self.data else None
+
+
+class TextFileDataset(MappingDataset):
+    def __init__(self, file_path, encoding='utf-8'):
+        self.data = []
+        with open(file_path, 'r', encoding=encoding) as f:
+            for line in f:
+                sample = line.strip()
+                if sample:
+                    self.data.append(sample)
+
+    def __len__(self):
+        return len(self.data)
+
+    def __getitem__(self, index):
+        return self.data[index]

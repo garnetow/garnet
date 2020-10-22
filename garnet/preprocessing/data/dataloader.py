@@ -98,7 +98,7 @@ class DataLoader(object):
         self.collator = collator
 
     def __iter__(self):
-        if self.num_workers == 0:
+        if self.num_workers <= 1:
             return SingleProcessDataIterator(self)
         else:
             return MultiProcessIterableDataIterator(self)
@@ -118,7 +118,6 @@ class DataLoader(object):
     def infinite_iter(self):
         while True:
             for data in self.__iter__():
-                print(data[0][0][:, 0])
                 yield data
 
     @property

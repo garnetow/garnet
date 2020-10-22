@@ -11,6 +11,8 @@ from .dataset import DatasetKind
 from .dataset import MappingDataset
 from .dataset import IterableDataset
 from .dataset import MatrixDataset
+from .dataset import TextFileDataset
+from .dataset import JsonFileDataset
 
 from .sampler import Sampler
 from .sampler import MappingSampler

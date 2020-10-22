@@ -12,7 +12,7 @@ import pathlib
 from functools import wraps
 
 from .base import StatefulUnit
-from ...utils.io import safe_save, safe_save_json, check_assert_suffix
+from ...utils.inouts import safe_save, safe_save_json, check_assert_suffix
 from ...utils.strings import is_cjk_character, is_punctuation_character
 
 PAD = '[PAD]'
