@@ -56,13 +56,13 @@ if __name__ == '__main__':
     train_dataset = JsonFileDataset('./similar_sentence_sample.json')
     train_dataloader = DataLoader(train_dataset, batch_size=4, shuffle=True, drop_last=True, collator=collator)
 
-    for batch in train_dataloader:
-        print(batch[0][0].shape)
-        print('-' * 32)
-    print('*' * 32)
-    for batch in train_dataloader:
-        print(batch[0][0].shape)
-        print('-' * 32)
+    # for batch in train_dataloader:
+    #     print(batch[0][0].shape)
+    #     print('-' * 32)
+    # print('*' * 32)
+    # for batch in train_dataloader:
+    #     print(batch[0][0].shape)
+    #     print('-' * 32)
 
     model = build_transformer_model(config_path,
                                     checkpoint_path,
@@ -82,6 +82,5 @@ if __name__ == '__main__':
 
     graph = tf.get_default_graph()
     op = graph.get_operation_by_name('sim_bert_loss_1/mul_3')
-
 
     model.fit_generator(train_dataloader, steps_per_epoch=100, epochs=2)
