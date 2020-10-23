@@ -53,7 +53,7 @@ class SimBertLoss(LossLayer):
         y_true = token_ids[:, 1:]  # target ids
         y_mask = seg_ids[:, 1:]
         y_pred = y_pred[:, :-1]  # predict logits
-        loss = K.categorical_crossentropy(y_true, y_pred)
+        loss = K.sparse_categorical_crossentropy(y_true, y_pred)
         loss = K.sum(loss * y_mask) / K.sum(y_mask)
         return loss
 
