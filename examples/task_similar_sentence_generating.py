@@ -45,7 +45,8 @@ class SimBertCollator(Collator):
 
 
 if __name__ == '__main__':
-    bert_path = 'E:/Models/chinese_simbert_L-12_H-768_A-12/'
+    # bert_path = 'E:/Models/chinese_simbert_L-12_H-768_A-12/'
+    bert_path = '../demo/chinese_simbert_L-12_H-768_A-12/'
     config_path = bert_path + 'bert_config.json'
     checkpoint_path = bert_path + 'bert_model.ckpt'
     dict_path = bert_path + 'vocab.txt'
