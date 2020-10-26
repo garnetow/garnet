@@ -76,8 +76,8 @@ class AutoRegressiveDecoder(object):
         Args:
             :param inputs: tokens which have been already known.
             :param n: number of samples taken from each sample process.
-            :param top_k: if not `None`, reserve `k` samples with highest probabilities.
-            :param top_p: if not `None`, reserve highest probabilities samples which probabilities cumsum exactly
+            :param top_k: if not `None`, reserve `k` tokens with highest probabilities.
+            :param top_p: if not `None`, reserve highest probabilities tokens which cumsum probabilities exactly
                 over `p`.
             :param states: some prediction needs states.
             :param min_ends_per_sample: number of end token coming up times which controls the end of prediction of
@@ -137,3 +137,25 @@ class AutoRegressiveDecoder(object):
         for index_sequence in output_indices:
             result.append(index_sequence)
         return result
+
+    def beam_search(self, inputs, top_k, states=None, min_ends_per_sample=1):
+        r"""Generate next sentence using beam search method.
+
+        Args:
+            :param inputs: tokens which have been already known.
+            :param top_k: if not `None`, reserve `k` samples with highest probabilities.
+            :param states: some prediction needs states.
+            :param min_ends_per_sample: number of end token coming up times which controls the end of prediction of
+                one sample.
+        Returns:
+            Decode sequence list with `top_k` samples.
+        """
+        inputs = [np.repeat(np.array([ipt]), top_k, axis=0) for ipt in inputs]
+        output_indices = np.repeat(self.first_output_index, top_k, axis=0)
+        output_scores = np.zeros(1)
+        for step in range(self.max_length):
+            scores, states = self.predict(inputs, output_indices=output_indices, states=states, return_type='logits')
+            scores = output_scores.reshape((-1, 1)) + scores
+            indices = scores.argpartition(-top_k, axis=None)[-top_k:]  # flatten array
+            indices_row = indices // scores.shape[1]  # indices of row
+            indices_col = np.reshape(indices % scores.shape[0], (-1, 1))
