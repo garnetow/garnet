@@ -62,8 +62,8 @@ class SynonymsDecoder(AutoRegressiveDecoder):
 
 
 if __name__ == '__main__':
-    bert_path = 'E:/Models/chinese_simbert_L-12_H-768_A-12/'
-    # bert_path = '../demo/chinese_simbert_L-12_H-768_A-12/'
+    # bert_path = 'E:/Models/chinese_simbert_L-12_H-768_A-12/'
+    bert_path = '../demo/chinese_simbert_L-12_H-768_A-12/'
     config_path = bert_path + 'bert_config.json'
     checkpoint_path = bert_path + 'bert_model.ckpt'
     dict_path = bert_path + 'vocab.txt'
@@ -96,5 +96,10 @@ if __name__ == '__main__':
     # model.fit_generator(train_dataloader, steps_per_epoch=100, epochs=2)
 
     decoder = SynonymsDecoder(end_index=tokenizer.token2id(tokenizer.token_end), max_length=32)
-    synonyms = decoder.generate('微信和支付宝哪个好？', n=20, top_k=5)
-    print(synonyms)
+
+    text = "车险理赔报案"
+    synonyms = decoder.generate(text, n=20, top_k=5)
+    print("Raw text: {}".format(text))
+    print("Synonyms:")
+    for t in synonyms:
+        print(t, end='\n')
