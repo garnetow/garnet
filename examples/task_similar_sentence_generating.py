@@ -9,6 +9,7 @@
 import random
 import keras
 import keras.backend as K
+import numpy as np
 import tensorflow as tf
 from keras.models import Model
 from keras.optimizers import Nadam
@@ -19,6 +20,7 @@ from garnet.layers import SimBertLoss
 
 from garnet.preprocessing.data import JsonFileDataset, Collator, DataLoader
 from garnet.utils import text_segment, sequence_padding
+from garnet.utils.decoder import AutoRegressiveDecoder
 
 
 class SimBertCollator(Collator):
@@ -44,9 +46,24 @@ class SimBertCollator(Collator):
         return [token_ids, seg_ids], None
 
 
+class SynonymsDecoder(AutoRegressiveDecoder):
+    @AutoRegressiveDecoder.predict_wraps(default_return_type='probas')
+    def predict(self, inputs, output_indices, states=None, return_type='probas'):
+        token_ids, segment_ids = inputs
+        token_ids = np.concatenate([token_ids, output_indices], axis=1)
+        segment_ids = np.concatenate([segment_ids, np.ones_like(output_indices)], axis=1)
+        probas = seq2seq_model.predict([token_ids, segment_ids])
+        return probas[:, -1]
+
+    def generate(self, text, n=5, top_k=5, top_p=None, max_length=None):
+        token_ids, segment_ids = tokenizer.transform(text, max_length=max_length)
+        outputs = self.random_sample([token_ids, segment_ids], n=n, top_k=top_k, top_p=top_p)
+        return [tokenizer.reverse_transform(sample) for sample in outputs]
+
+
 if __name__ == '__main__':
-    # bert_path = 'E:/Models/chinese_simbert_L-12_H-768_A-12/'
-    bert_path = '../demo/chinese_simbert_L-12_H-768_A-12/'
+    bert_path = 'E:/Models/chinese_simbert_L-12_H-768_A-12/'
+    # bert_path = '../demo/chinese_simbert_L-12_H-768_A-12/'
     config_path = bert_path + 'bert_config.json'
     checkpoint_path = bert_path + 'bert_model.ckpt'
     dict_path = bert_path + 'vocab.txt'
@@ -56,14 +73,6 @@ if __name__ == '__main__':
 
     train_dataset = JsonFileDataset('./similar_sentence_sample.json')
     train_dataloader = DataLoader(train_dataset, batch_size=4, shuffle=True, drop_last=True, collator=collator)
-
-    # for batch in train_dataloader:
-    #     print(batch[0][0].shape)
-    #     print('-' * 32)
-    # print('*' * 32)
-    # for batch in train_dataloader:
-    #     print(batch[0][0].shape)
-    #     print('-' * 32)
 
     model = build_transformer_model(config_path,
                                     checkpoint_path,
@@ -81,7 +90,11 @@ if __name__ == '__main__':
     model.compile(optimizer=Nadam(0.001))
     model.summary()
 
-    graph = tf.get_default_graph()
-    op = graph.get_operation_by_name('sim_bert_loss_1/mul_3')
+    # graph = tf.get_default_graph()
+    # op = graph.get_operation_by_name('sim_bert_loss_1/mul_3')
 
-    model.fit_generator(train_dataloader, steps_per_epoch=100, epochs=2)
+    # model.fit_generator(train_dataloader, steps_per_epoch=100, epochs=2)
+
+    decoder = SynonymsDecoder(end_index=tokenizer.token2id(tokenizer.token_end), max_length=32)
+    synonyms = decoder.generate('微信和支付宝哪个好？', n=20, top_k=5)
+    print(synonyms)
