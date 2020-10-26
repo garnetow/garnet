@@ -247,7 +247,7 @@ class BertTokenizer(Tokenizer):
                 text += token
             elif len(token) == 1 and is_punctuation_character(token):
                 text += token + ' '
-            elif i > 0 and is_cjk_character(token):
+            elif i > 0 and is_cjk_character(text[-1]):
                 text += token
             else:
                 text += ' ' + token
