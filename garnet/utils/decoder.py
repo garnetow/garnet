@@ -150,12 +150,39 @@ class AutoRegressiveDecoder(object):
         Returns:
             Decode sequence list with `top_k` samples.
         """
-        inputs = [np.repeat(np.array([ipt]), top_k, axis=0) for ipt in inputs]
-        output_indices = np.repeat(self.first_output_index, top_k, axis=0)
+        results = []
+
+        inputs = [np.array([ipt]) for ipt in inputs]
+        output_indices = self.first_output_index
         output_scores = np.zeros(1)
         for step in range(self.max_length):
             scores, states = self.predict(inputs, output_indices=output_indices, states=states, return_type='logits')
-            scores = output_scores.reshape((-1, 1)) + scores
+
+            if step == 0:
+                inputs = [np.repeat(ipt, top_k, axis=0) for ipt in inputs]
+
+            scores = output_scores.reshape((-1, 1)) + scores  # accumulated token scores
             indices = scores.argpartition(-top_k, axis=None)[-top_k:]  # flatten array
-            indices_row = indices // scores.shape[1]  # indices of row
-            indices_col = np.reshape(indices % scores.shape[0], (-1, 1))
+            indices_row = indices // scores.shape[1]  # indices of row, point out which sample
+            indices_col = np.reshape(indices % scores.shape[1], (-1, 1))  # token index
+            output_indices = np.concatenate([output_indices[indices_row], indices_col], axis=1)
+            output_scores = np.take_along_axis(scores, indices, axis=None)  # get accumulated scores
+
+            end_count = np.sum(output_indices == self.end_index, axis=1)
+            if output_indices.shape[1] >= min_ends_per_sample:
+                best = output_scores.argmax()
+                if end_count[best] == min_ends_per_sample:
+                    results.append(output_indices[best])
+                else:
+                    uncompleted = end_count < min_ends_per_sample
+                    if not uncompleted.all():  # some samples are uncompleted
+                        inputs = [ipt[uncompleted] for ipt in inputs]
+                        output_indices = output_indices[uncompleted]
+                        output_scores = output_scores[uncompleted]
+                        top_k = uncompleted.sum()
+                        if len(output_indices) == 0:
+                            break
+
+        for index_sequence in output_indices[-output_scores.argsort()]:
+            results.append(index_sequence)
+        return results

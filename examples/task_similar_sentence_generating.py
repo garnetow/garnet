@@ -55,24 +55,24 @@ class SynonymsDecoder(AutoRegressiveDecoder):
         probas = seq2seq_model.predict([token_ids, segment_ids])
         return probas[:, -1]
 
-    def generate(self, text, n=5, top_k=5, top_p=None, max_length=None):
+    def generate(self, text, n=5, top_k=5, top_p=None, max_length=None, mode='random'):
         token_ids, segment_ids = tokenizer.transform(text, max_length=max_length)
-        outputs = self.random_sample([token_ids, segment_ids], n=n, top_k=top_k, top_p=top_p)
+        if mode == 'random':
+            outputs = self.random_sample([token_ids, segment_ids], n=n, top_k=top_k, top_p=top_p)
+        else:
+            outputs = self.beam_search([token_ids, segment_ids], top_k=top_k)
         return [tokenizer.reverse_transform(sample) for sample in outputs]
 
 
 if __name__ == '__main__':
-    # bert_path = 'E:/Models/chinese_simbert_L-12_H-768_A-12/'
-    bert_path = '../demo/chinese_simbert_L-12_H-768_A-12/'
+    bert_path = 'E:/Models/chinese_simbert_L-12_H-768_A-12/'
+    # bert_path = '../demo/chinese_simbert_L-12_H-768_A-12/'
     config_path = bert_path + 'bert_config.json'
     checkpoint_path = bert_path + 'bert_model.ckpt'
     dict_path = bert_path + 'vocab.txt'
 
     tokenizer = BertTokenizer(dict_path, ignore_case=True)
     collator = SimBertCollator(tokenizer)
-
-    train_dataset = JsonFileDataset('./similar_sentence_sample.json')
-    train_dataloader = DataLoader(train_dataset, batch_size=4, shuffle=True, drop_last=True, collator=collator)
 
     model = build_transformer_model(config_path,
                                     checkpoint_path,
@@ -90,6 +90,9 @@ if __name__ == '__main__':
     model.compile(optimizer=Nadam(0.001))
     model.summary()
 
+    # train_dataset = JsonFileDataset('./similar_sentence_sample.json')
+    # train_dataloader = DataLoader(train_dataset, batch_size=4, shuffle=True, drop_last=True, collator=collator)
+
     # graph = tf.get_default_graph()
     # op = graph.get_operation_by_name('sim_bert_loss_1/mul_3')
 
@@ -98,7 +101,7 @@ if __name__ == '__main__':
     decoder = SynonymsDecoder(end_index=tokenizer.token2id(tokenizer.token_end), max_length=32)
 
     text = "车险理赔报案"
-    synonyms = decoder.generate(text, n=20, top_k=5)
+    synonyms = decoder.generate(text, n=20, top_k=5, mode='random')
     print("Raw text: {}".format(text))
     print("Synonyms:")
     for t in synonyms:
