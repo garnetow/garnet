@@ -1,7 +1,7 @@
 # coding: utf-8
 
 """
-@File   : task_similar_sentence_generating.py
+@File   : task_generate_synonyms.py
 @Author : garnet
 @Time   : 2020/10/21 11:45
 """
