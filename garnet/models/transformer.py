@@ -6,6 +6,7 @@
 @Time   : 2020/9/29 8:48
 """
 
+import numpy as np
 import keras
 import tensorflow as tf
 import keras.backend as K
@@ -19,6 +20,7 @@ from ..layers.layer_normalization import LayerNormalization
 from ..layers.attention import MultiHeadAttention
 from ..layers.feedforward import FeedForward
 from ..layers.embedding import DenseEmbedding
+from ..utils.functions.normalization import truncated_normal
 
 
 class Transformer(WrappedModel):
@@ -35,6 +37,8 @@ class Transformer(WrappedModel):
                  hidden_dropout_prob=None,  # 其他层dropout比例
                  max_position_embeddings=512,  # 位置编码最大范围
                  fixed_sequence_length=None,  # 固定的序列长度
+                 reserved_tokens=None,  # 要保留的词ID列表
+                 extended_tokens=None,  # 扩展的词ID列表
                  prefix=None,  # 层名称前缀
                  name=None,  # 模型名称
                  **kwargs):
@@ -61,11 +65,19 @@ class Transformer(WrappedModel):
                 Typically set this to something large just in case (e.g., 512 or 1024 or 2048).
             :param fixed_sequence_length (:obj:`int`, optional, defaults: None):
                 fixed length of token sequence. Default is `None`, which means dynamic sequence length in each batch.
+            :param reserved_tokens: (:obj:`list`, optional, defaults: None):
+                list of tokens representing a simplified subset of all tokens in transformer-like model vocabulary.
+            :param extended_tokens: (:obj:`list`, optional, defaults: None):
+                list of extra extended tokens, which are not included in original model vocabulary.
             :param prefix (:obj:`str`, optional, default: `None`):
                 prefix of the every layers' name in the model.
             :param name (:obj:`str`, optional, default: `None`):
                 name of the model.
         """
+        if reserved_tokens is not None:
+            vocab_size = len(reserved_tokens)
+        if extended_tokens is not None:
+            vocab_size += len(extended_tokens)
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
@@ -79,6 +91,8 @@ class Transformer(WrappedModel):
         self.embedding_size = embedding_size or hidden_size
         self.max_position_embeddings = max_position_embeddings
         self.fixed_sequence_length = fixed_sequence_length
+        self.reserved_tokens = reserved_tokens
+        self.extended_tokens = extended_tokens
         self.prefix = prefix or ''
         self.name = name
 
@@ -287,6 +301,18 @@ class Transformer(WrappedModel):
         r"""Load the weight of a single variable.
         """
         return tf.train.load_variable(checkpoint, name)
+
+    def load_embedding(self, embeddings):
+        if self.reserved_tokens is not None:
+            embeddings = embeddings[self.reserved_tokens]
+        if self.extended_tokens is not None:
+            extended_embeddings = truncated_normal(shape=(len(self.extended_tokens), embeddings.shape[1]),
+                                                   mean=0.,
+                                                   stddev=0.02,
+                                                   lower=2,
+                                                   upper=2)
+            embeddings = np.concatenate([embeddings, extended_embeddings], 0)
+        return embeddings
 
     def create_variable(self, name, value):
         r"""Initial variable with truncated normal distribution.
