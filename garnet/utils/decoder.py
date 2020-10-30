@@ -9,7 +9,7 @@
 import numpy as np
 from functools import wraps
 
-from .functions import softmax
+from .functions.activations import softmax
 
 
 class AutoRegressiveDecoder(object):

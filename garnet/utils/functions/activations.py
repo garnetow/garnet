@@ -1,7 +1,7 @@
 # coding: utf-8
 
 """
-@File   : functions.py
+@File   : activations.py
 @Author : garnet
 @Time   : 2020/10/26 14:40
 """
