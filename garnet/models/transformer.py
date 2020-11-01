@@ -673,6 +673,8 @@ class Bert(Transformer):
 
     def load_variable(self, checkpoint, name):
         variable = super(Bert, self).load_variable(checkpoint, name)
+        if name in ['bert/embeddings/word_embeddings', 'cls/predictions/output_bias']:
+            return self.load_embedding(variable)
         if name == 'cls/seq_relationship/output_weights':
             return variable.T
         else:

@@ -263,7 +263,8 @@ class BertVocabulary(Vocabulary):
                  token_end=EOS,
                  encoding: str = 'utf-8',
                  simplified: bool = False,
-                 special_tokens=None,
+                 start_tokens=None,
+                 extended_tokens=None,
                  ignore_case=False,
                  **kwargs):
         super(BertVocabulary, self).__init__(
@@ -278,32 +279,55 @@ class BertVocabulary(Vocabulary):
 
         self.cls_token = CLS
         self.sep_token = SEP
+        self.simplified_mapping = None
 
         if vocab_path is not None:
-            self.init_vocab(vocab_path, encoding=encoding, simplified=simplified, special_tokens=special_tokens)
+            self.init_vocab(vocab_path,
+                            encoding=encoding,
+                            simplified=simplified,
+                            start_tokens=start_tokens,
+                            extended_tokens=extended_tokens)
 
-    def init_vocab(self, vocab_path, encoding='utf-8', simplified=False, special_tokens=None):
-        vocab = dict()
+    def init_vocab(self, vocab_path, encoding='utf-8', simplified=False, start_tokens=None, extended_tokens=None):
+        r"""
+        Args:
+            :param simplified: whether simplify raw bert vocabulary.
+            :param start_tokens: useful when `simplified` is `True`, pick out tokens in bert vocabulary, and simplified
+                vocabulary will start with these tokens.
+            :param extended_tokens: other tokens which are not in the raw bert vocabulary. Add these token in the end
+                of vocabulary.
+        """
+        vocab, raw_token_indices = dict(), None
         with open(vocab_path, 'r', encoding=encoding) as f:
             for line in f:
-                token = line.strip()
-                if simplified:
-                    if token not in vocab:
-                        if len(token) > 1:
-                            if all([True if not is_cjk_character(char) and not is_punctuation_character(char) else False
-                                    for char in self.stem(token)]):
-                                vocab[token] = len(vocab)
-                        else:
-                            vocab[token] = len(vocab)
-                else:
-                    vocab[token] = len(vocab)
+                token = line.split()
+                token = token[0] if token else line.strip()
+                vocab[token] = len(vocab)
 
-        if special_tokens is not None:
-            for token in special_tokens:
+        if simplified:
+            new_vocab, raw_token_indices = dict(), []
+            if start_tokens:
+                for token in start_tokens:
+                    new_vocab[token] = len(new_vocab)
+                    raw_token_indices.append(vocab[token])
+
+            for token, index in sorted(vocab.items(), key=lambda x: x[1], reverse=False):
+                if token not in new_vocab:
+                    if len(token) > 1:
+                        if not all([True if not is_cjk_character(char) and not is_punctuation_character(char) else False
+                                    for char in self.stem(token)]):
+                            continue
+                    new_vocab[token] = len(new_vocab)
+                    raw_token_indices.append(index)
+            vocab = new_vocab
+
+        if extended_tokens is not None:
+            for token in extended_tokens:
                 if token not in vocab:
                     vocab[token] = len(vocab)
 
         self._vocab = vocab
+        self.simplified_mapping = raw_token_indices
         self.update_reverse_vocab()
         self.fitted = True
 

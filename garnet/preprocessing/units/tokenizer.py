@@ -148,6 +148,9 @@ class BertTokenizer(Tokenizer):
                  token_end=SEP,
                  encoding='utf-8',
                  max_length=None,
+                 simplified=False,
+                 start_tokens=None,
+                 extended_tokens=None,
                  **kwargs):
         super(BertTokenizer, self).__init__(with_sos=True,
                                             with_eos=True,
@@ -161,11 +164,16 @@ class BertTokenizer(Tokenizer):
         self.vocab = None
         self.ignore_case = ignore_case
 
+        self.simplified_mapping = None
+
         self.fit(vocab_path,
                  ignore_case=ignore_case,
                  token_start=token_start,
                  token_end=token_end,
-                 encoding=encoding)
+                 encoding=encoding,
+                 simplified=simplified,
+                 start_tokens=start_tokens,
+                 extended_tokens=extended_tokens)
 
         self.token_start = self.vocab.start_token
         self.token_end = self.vocab.end_token
@@ -182,14 +190,21 @@ class BertTokenizer(Tokenizer):
             ignore_case=False,
             token_start=SOS,
             token_end=EOS,
-            encoding='utf-8'):
+            encoding='utf-8',
+            simplified=False,
+            start_tokens=None,
+            extended_tokens=None):
         self.vocab = BertVocabulary(
             vocab_path,
             ignore_case=ignore_case,
             token_start=token_start,
             token_end=token_end,
-            encoding=encoding
+            encoding=encoding,
+            simplified=simplified,
+            start_tokens=start_tokens,
+            extended_tokens=extended_tokens,
         )
+        self.simplified_mapping = self.vocab.simplified_mapping
         self.fitted = True
 
     def transform(self, first_text, second_text=None, max_length=None, first_length=None, second_length=None):

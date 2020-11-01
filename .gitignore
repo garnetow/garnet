@@ -134,3 +134,7 @@ dmypy.json
 # Test code
 demo/
 demo*
+
+# Model
+model/
+models/

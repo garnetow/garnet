@@ -18,4 +18,7 @@ from .feedforward import FeedForward
 
 from .layer_normalization import LayerNormalization
 
+from .loss import LossLayer
+from .loss import SecondSequenceCrossEntropy
+
 from .simbert import SimBertLoss
