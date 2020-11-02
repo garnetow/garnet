@@ -15,11 +15,11 @@ from keras.layers import Input, Dense, Dropout, Add, Lambda, Activation
 
 from .model import WrappedModel
 from ..layers.core import BiasAdd
-from ..layers.position import PositionEmbedding
-from ..layers.layer_normalization import LayerNormalization
-from ..layers.attention import MultiHeadAttention
-from ..layers.feedforward import FeedForward
-from ..layers.embedding import DenseEmbedding
+from ..layers.bert import PositionEmbedding
+from ..layers.bert import LayerNormalization
+from ..layers.bert import MultiHeadAttention
+from ..layers.bert import FeedForward
+from ..layers.bert import DenseEmbedding
 from ..utils.functions.normalization import truncated_normal
 
 
@@ -560,7 +560,6 @@ class Bert(Transformer):
             inputs=x,
             layer=FeedForward,
             units=self.intermediate_size,
-            dropout_rate=self.hidden_dropout_prob,
             activation=self.hidden_act,
             kernel_initializer=self.initializer,
             name=feed_forward_name,

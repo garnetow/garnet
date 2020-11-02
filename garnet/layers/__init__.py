@@ -8,15 +8,11 @@
 
 from .core import BiasAdd
 
-from .position import PositionEmbedding
-
-from .attention import MultiHeadAttention
-
-from .embedding import DenseEmbedding
-
-from .feedforward import FeedForward
-
-from .layer_normalization import LayerNormalization
+from .bert import MultiHeadAttention
+from .bert import LayerNormalization
+from .bert import FeedForward
+from .bert import DenseEmbedding
+from .bert import PositionEmbedding
 
 from .loss import LossLayer
 from .loss import SecondSequenceCrossEntropy
