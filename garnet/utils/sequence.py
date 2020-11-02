@@ -9,7 +9,7 @@
 import numpy as np
 
 
-def sequence_padding(seq, max_len=None, padding='post', truncate='post', padding_index=0, dtype='int'):
+def sequence_padding(seq, max_len=None, padding='post', truncate='post', padding_index=0, dtype='int32'):
     r"""Truncate or pad sequence into fixed length.
     """
 
