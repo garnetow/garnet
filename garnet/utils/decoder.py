@@ -162,15 +162,13 @@ class AutoRegressiveDecoder(object):
         for step in range(self.max_length):
             scores, states = self.predict(inputs, output_indices=output_indices, states=states, return_type='logits')
 
-            if step == 0:
-                inputs = [np.repeat(ipt, cache_k, axis=0) for ipt in inputs]
-
             scores = output_scores.reshape((-1, 1)) + scores  # accumulated token scores
             indices = scores.argpartition(-cache_k, axis=None)[-cache_k:]  # flatten array
             indices_row = indices // scores.shape[1]  # indices of row, point out which sample
             indices_col = np.reshape(indices % scores.shape[1], (-1, 1))  # token index
             output_indices = np.concatenate([output_indices[indices_row], indices_col], axis=1)
             output_scores = np.take_along_axis(scores, indices, axis=None)  # get accumulated scores
+            inputs = [ipt[indices_row] for ipt in inputs]
 
             end_count = np.sum(output_indices == self.end_index, axis=1)
             if output_indices.shape[1] >= min_ends_per_sample:
