@@ -138,19 +138,23 @@ class AutoRegressiveDecoder(object):
             result.append(index_sequence)
         return result
 
-    def beam_search(self, inputs, top_k, states=None, min_ends_per_sample=1):
+    def beam_search(self, inputs, return_k, cache_k=None, states=None, min_ends_per_sample=1, mode='total'):
         r"""Generate next sentence using beam search method.
 
         Args:
             :param inputs: tokens which have been already known.
-            :param top_k: if not `None`, reserve `k` samples with highest probabilities.
+            :param return_k: return top k highest score samples.
+            :param cache_k: keep `cache_k` samples with highest scores during decoding search. If `None`, it
+                will be assigned as `return_k`.
             :param states: some prediction needs states.
             :param min_ends_per_sample: number of end token coming up times which controls the end of prediction of
                 one sample.
         Returns:
             Decode sequence list with `top_k` samples.
         """
-        results = []
+        results, result_scores = [], []
+        if not cache_k:
+            cache_k = return_k
 
         inputs = [np.array([ipt]) for ipt in inputs]
         output_indices = self.first_output_index
@@ -159,10 +163,10 @@ class AutoRegressiveDecoder(object):
             scores, states = self.predict(inputs, output_indices=output_indices, states=states, return_type='logits')
 
             if step == 0:
-                inputs = [np.repeat(ipt, top_k, axis=0) for ipt in inputs]
+                inputs = [np.repeat(ipt, cache_k, axis=0) for ipt in inputs]
 
             scores = output_scores.reshape((-1, 1)) + scores  # accumulated token scores
-            indices = scores.argpartition(-top_k, axis=None)[-top_k:]  # flatten array
+            indices = scores.argpartition(-cache_k, axis=None)[-cache_k:]  # flatten array
             indices_row = indices // scores.shape[1]  # indices of row, point out which sample
             indices_col = np.reshape(indices % scores.shape[1], (-1, 1))  # token index
             output_indices = np.concatenate([output_indices[indices_row], indices_col], axis=1)
@@ -170,19 +174,30 @@ class AutoRegressiveDecoder(object):
 
             end_count = np.sum(output_indices == self.end_index, axis=1)
             if output_indices.shape[1] >= min_ends_per_sample:
-                best = output_scores.argmax()
-                if end_count[best] == min_ends_per_sample:
-                    results.append(output_indices[best])
-                else:
-                    uncompleted = end_count < min_ends_per_sample
-                    if not uncompleted.all():  # some samples are uncompleted
-                        inputs = [ipt[uncompleted] for ipt in inputs]
-                        output_indices = output_indices[uncompleted]
-                        output_scores = output_scores[uncompleted]
-                        top_k = uncompleted.sum()
-                        if len(output_indices) == 0:
+                uncompleted = end_count < min_ends_per_sample
+                if not uncompleted.all():
+                    best_index = output_scores.argmax()
+                    if end_count[best_index] == min_ends_per_sample:
+                        results.append(output_indices[best_index])
+                        result_scores.append(output_scores[best_index])
+                        if len(results) == return_k:
                             break
 
-        for index_sequence in output_indices[-output_scores.argsort()]:
-            results.append(index_sequence)
-        return results
+                    inputs = [ipt[uncompleted] for ipt in inputs]
+                    output_indices = output_indices[uncompleted]
+                    output_scores = output_scores[uncompleted]
+                    if len(output_indices) == 0:
+                        break
+
+        if len(results) < return_k:
+            for index in np.argsort(-output_scores)[:(return_k - len(results))]:
+                results.append(output_indices[index])
+                result_scores.append(output_scores[index])
+
+        sorted_results = self.sort_scores(results, result_scores, mode=mode)
+        return sorted_results
+
+    @staticmethod
+    def sort_scores(samples, scores, mode='total'):
+        s = sorted(zip(samples, scores), key=lambda x: x[1], reverse=True)
+        return list(zip(*s))[0]
