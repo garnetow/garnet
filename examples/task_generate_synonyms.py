@@ -60,7 +60,7 @@ class SynonymsDecoder(AutoRegressiveDecoder):
         if mode == 'random':
             outputs = self.random_sample([token_ids, segment_ids], n=n, top_k=top_k, top_p=top_p)
         else:
-            outputs = self.beam_search([token_ids, segment_ids], top_k=top_k)
+            outputs = self.beam_search([token_ids, segment_ids], return_k=n, cache_k=top_k)
         return [tokenizer.reverse_transform(sample) for sample in outputs]
 
 
