@@ -449,7 +449,7 @@ class FeedForward(Layer):
         super(FeedForward, self).build(input_shape)
 
     @recompute_grad
-    def call(self, inputs, training=None):
+    def call(self, inputs):
         x = self.dense1(inputs)
         x = self.dense2(x)
         return x
