@@ -118,27 +118,53 @@ class MultiHeadAttention(Layer):
     @recompute_grad
     def call(self,
              inputs,
-             query_mask=None,
-             value_mask=None,
-             attention_mask=None,  # (batch_size, query_length, key_length) or (batch_size, 1, query_length, key_length)
-             head_mask=None,  # (num_heads,)
+             mask=None,
+             attention_mask=None,
+             relative_position=None,
+             head_mask=None,
              encoder_hidden_context=None,
              encode_attention_mask=None,
              **kwargs):
         """
-        q: (batch_size, query_seq_len, hidden_query)
-        k: (batch_size, key_seq_len, hidden_key)
-        v: (batch_size, key_seq_len, hidden_value)
+        Full inputs order:
+        - query sequence: (batch_size, query_seq_len, hidden_query)
+        - key sequence: (batch_size, key_seq_len, hidden_key)
+        - value sequence: (batch_size, key_seq_len, hidden_value)
+        - attention mask: (batch_size, query_length, key_length) or (batch_size, 1, query_length, key_length)
+        - relative position: (query_seq_len, key_seq_len, num_heads)
+        - head mask: (num_heads,)
         """
+
+        num_inputs = 3
         if isinstance(inputs, list):
-            q, k, v = inputs
+            q, k, v = inputs[:3]
         else:
             q = k = v = inputs
 
-        if query_mask is not None:
-            query_mask = K.cast(query_mask, dtype=K.floatx())
-        if value_mask is not None:
-            value_mask = K.cast(value_mask, dtype=K.floatx())
+        query_mask = value_mask = None
+        if isinstance(inputs, list):
+            if mask is not None and mask[0] is not None:
+                query_mask = K.cast(mask[0], dtype=K.floatx())
+            if mask is not None and mask[2] is not None:
+                value_mask = K.cast(mask[2], dtype=K.floatx())
+        elif mask is not None:
+            query_mask, value_mask = mask, mask
+
+        if attention_mask:
+            attention_mask = inputs[num_inputs]
+            num_inputs += 1
+        if relative_position:
+            position_embedding = inputs[num_inputs]
+            num_inputs += 1
+        if head_mask:
+            head_mask = inputs[num_inputs]
+            num_inputs += 1
+        if encoder_hidden_context:
+            encoder_hidden_context = inputs[num_inputs]
+            num_inputs += 1
+        if encode_attention_mask:
+            encode_attention_mask = inputs[num_inputs]
+            num_inputs += 1
 
         # linear transformation
         qw = self.q_proj(q)  # (batch_size, query_seq_len, head_num * key_size)
@@ -161,6 +187,14 @@ class MultiHeadAttention(Layer):
 
         # calculate attention scores(scale-dot method)
         a = tf.einsum('bjhd,bkhd->bhjk', qw, kw)  # (batch_size, head_num, query_seq_len, key_seq_len)
+
+        if relative_position:
+            if relative_position == 't5':
+                position_embedding = K.permute_dimensions(position_embedding, (2, 0, 1))
+                a += K.expand_dims(position_embedding, axis=0)
+            elif relative_position == 'typical':
+                a += tf.einsum('bjhd,jkd->bhjk', qw, position_embedding)
+
         if self.attention_scale:
             a = a / (self.key_size ** 0.5)
 

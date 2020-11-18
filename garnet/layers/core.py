@@ -33,3 +33,10 @@ class BiasAdd(Layer):
 
     def call(self, inputs, **kwargs):
         return K.bias_add(inputs, bias=self.bias)
+
+
+custom_objects = {
+    'BiasAdd': BiasAdd,
+}
+
+keras.utils.get_custom_objects().update(custom_objects)

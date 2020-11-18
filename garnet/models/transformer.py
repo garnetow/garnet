@@ -20,6 +20,7 @@ from ..layers.bert import LayerNormalization
 from ..layers.bert import MultiHeadAttention
 from ..layers.bert import FeedForward
 from ..layers.bert import DenseEmbedding
+from ..layers.t5 import RelativePositionEmbeddingT5
 from ..utils.functions.normalization import truncated_normal
 
 
@@ -102,7 +103,7 @@ class Transformer(WrappedModel):
         self.outputs = None
         self.layers = dict()
         self.attention_mask = None
-        self.position_bias = None
+        self.relative_position = None
         self.model = None
         self.built = False
 
@@ -748,3 +749,233 @@ class Bert(Transformer):
             })
 
         return mapping
+
+
+class T5Base(Transformer):
+    r"""T5 model with version t5.1.1.
+
+    See more at:
+    https://github.com/google-research/text-to-text-transfer-transformer/blob/master/released_checkpoints.md#t511
+    """
+
+    def __init__(self, version='t5.1.1', **kwargs):
+        super(T5Base, self).__init__(**kwargs)
+        self.version = version
+
+    def load_variable(self, checkpoint, name):
+        variable = super(T5Base, self).load_variable(checkpoint, name)
+        if name == 'shared/embedding':
+            return self.load_embedding(variable)
+        elif name == 'decoder/logits/kernel':
+            return self.load_embedding(variable.T).T
+        elif 'relative_attention_bias' in name:
+            return variable.T
+        else:
+            return variable
+
+    def create_variable(self, name, value):
+        if 'relative_attention_bias' in name:
+            value = value.T
+        return super(T5Base, self).create_variable(name, value)
+
+    def variable_mapping(self):
+        mapping = {
+            'Embedding-Token': ['shared/embedding'],
+            'Encoder-Embedding-Relative-Position': [
+                'encoder/block_000/layer_000/SelfAttention/relative_attention_bias'
+            ],
+            'Encoder-Output-Norm': ['encoder/final_layer_norm/scale'],
+            'Decoder-Embedding-Relative-Position': [
+                'decoder/block_000/layer_000/SelfAttention/relative_attention_bias',
+            ],
+            'Decoder-Output-Norm': ['decoder/final_layer_norm/scale'],
+        }
+
+        for i in range(self.num_hidden_layers):
+            # encoder parameters
+            prefix = 'encoder/block_%03d/' % i
+            mapping.update({
+                'Encoder-Transformer-%d-MultiHeadSelfAttention' % i: [
+                    prefix + 'layer_000/SelfAttention/q',
+                    prefix + 'layer_000/SelfAttention/k',
+                    prefix + 'layer_000/SelfAttention/v',
+                    prefix + 'layer_000/SelfAttention/o',
+                ],
+                'Encoder-Transformer-%d-MultiHeadSelfAttention-Norm' % i: [
+                    prefix + 'layer_000/layer_norm/scale',
+                ],
+                'Encoder-Transformer-%d-FeedForward' % i: [
+                    prefix + 'layer_001/DenseReluDense/wi/kernel',
+                    prefix + 'layer_001/DenseReluDense/wo/kernel',
+                ],
+                'Encoder-Transformer-%d-FeedForward-Norm' % i: [
+                    prefix + 'layer_001/layer_norm/scale',
+                ],
+            })
+
+            # decoder parameters
+            prefix = 'decoder/block_%03d/' % i
+            mapping.update({
+                'Decoder-Transformer-%d-MultiHeadSelfAttention' % i: [
+                    prefix + 'layer_000/SelfAttention/q',
+                    prefix + 'layer_000/SelfAttention/k',
+                    prefix + 'layer_000/SelfAttention/v',
+                    prefix + 'layer_000/SelfAttention/o',
+                ],
+                'Decoder-Transformer-%d-MultiHeadSelfAttention-Norm' % i: [
+                    prefix + 'layer_000/layer_norm/scale',
+                ],
+                'Decoder-Transformer-%d-MultiHeadCrossAttention' % i: [
+                    prefix + 'layer_001/EncDecAttention/q',
+                    prefix + 'layer_001/EncDecAttention/k',
+                    prefix + 'layer_001/EncDecAttention/v',
+                    prefix + 'layer_001/EncDecAttention/o',
+                ],
+                'Decoder-Transformer-%d-MultiHeadCrossAttention-Norm' % i: [
+                    prefix + 'layer_001/layer_norm/scale',
+                ],
+                'Decoder-Transformer-%d-FeedForward' % i: [
+                    prefix + 'layer_002/DenseReluDense/wi/kernel',
+                    prefix + 'layer_002/DenseReluDense/wo/kernel',
+                ],
+                'Decoder-Transformer-%d-FeedForward-Norm' % i: [
+                    prefix + 'layer_002/layer_norm/scale',
+                ],
+            })
+
+        if self.version == 't5.1.1':
+            mapping['Encoder-Output-Norm'] = ['encoder/rms_norm/scale']
+            mapping['Decoder-Output-Norm'] = ['decoder/rms_norm/scale']
+            mapping['Decoder-Output-LM'] = ['decoder/logits/kernel']
+            mapping = {
+                k: [i.replace('layer_norm', 'rms_norm') for i in v]
+                for k, v in mapping.items()
+            }
+            for i in range(self.num_hidden_layers):
+                for layer in [
+                    'Encoder-Transformer-%d-FeedForward' % i,
+                    'Decoder-Transformer-%d-FeedForward' % i
+                ]:
+                    mapping[layer] = [
+                        mapping[layer][0][:-7] + '_0' + mapping[layer][0][-7:],
+                        mapping[layer][0][:-7] + '_1' + mapping[layer][0][-7:],
+                        mapping[layer][1]
+                    ]
+
+        return mapping
+
+
+class T5Encoder(T5Base):
+    def compute_relative_position(self, inputs=None):
+        if self.relative_position is None:
+            self.relative_position = self.apply(
+                inputs=[inputs, inputs],
+                layers=RelativePositionEmbeddingT5,
+                input_dim=32,
+                output_dim=self.num_attention_heads,
+                bidirectional=True,
+                embeddings_initializer=self.initializer,
+                name='Encoder-Embedding-Relative-Position',
+            )
+        return self.relative_position
+
+    def get_inputs(self, **kwargs):
+        x_token = self.apply(
+            layer=Input,
+            shape=(self.fixed_sequence_length,),
+            name='Encoder-Input-Token'
+        )
+        return x_token
+
+    def apply_embeddings(self, inputs, **kwargs):
+        x = self.apply(
+            inputs=inputs,
+            layer=DenseEmbedding,
+            input_dim=self.vocab_size,
+            output_dim=self.embedding_size,
+            embeddings_initializer=self.initializer,
+            mask_zero=True,
+            name='Embedding-Token',
+        )
+
+        x = self.apply(
+            inputs=x,
+            layer=Dropout,
+            rate=self.hidden_dropout_prob,
+            name='Encoder-Embedding-Dropout'
+        )
+
+        if self.embedding_size != self.hidden_size:
+            x = self.apply(
+                inputs=x,
+                layer=Dense,
+                units=self.hidden_size,
+                kernel_initializer=self.initializer,
+                name='Encoder-Embedding-Mapping'
+            )
+
+        return x
+
+    def apply_main_layers(self,
+                          inputs,
+                          index,
+                          layer_norm_cond_inputs=None,
+                          layer_norm_cond_hidden_size=None,
+                          layer_norm_cond_hidden_act=None,
+                          **kwargs):
+        r"""
+        In each layer, tensors flow in the following order:
+        Layer Normalization --> Attention --> Add --> Layer Normalization --> Feed Forward --> Add
+        """
+        attention_name = 'Encoder-Transformer-{}-MultiHeadSelfAttention'.format(index)
+        feed_forward_name = 'Encoder-Transformer-{}-FeedForward'.format(index)
+        relative_position = self.compute_relative_position(inputs)
+
+        xt = self.apply(
+            inputs=inputs if layer_norm_cond_inputs is None else [x, layer_norm_cond_inputs],
+            layer=LayerNormalization,
+            center=False,
+            epsilon=1e-6,
+            conditional=layer_norm_cond_inputs is not None,
+            cond_hidden_units=layer_norm_cond_hidden_size,
+            cond_hidden_activation=layer_norm_cond_hidden_act,
+            cond_hidden_initializer=self.initializer,
+            name='{}-Norm'.format(attention_name),
+        )
+
+
+class T5Decoder(T5Base):
+    pass
+
+
+class T5(T5Base):
+    r"""T5 model.
+    """
+
+    def __init__(self, **kwargs):
+        super(T5, self).__init__(**kwargs)
+        kwargs['layers'] = self.layers
+
+        encoder_name = 'Encoder'
+        decoder_name = 'Decoder'
+        if 'name' in kwargs:
+            encoder_name = '{}_{}'.format(kwargs['name'], encoder_name)
+            decoder_name = '{}_{}'.format(kwargs['name'], decoder_name)
+            del kwargs['name']
+
+        self.encoder = T5Encoder(name=encoder_name, **kwargs)
+        self.decoder = T5Decoder(name=decoder_name, **kwargs)
+
+    def build(self,
+              attention_mask=None,
+              head_mask=None,
+              input_embeds=None,
+              custom_position_ids=None,
+              encoder_hidden_context=None,
+              encode_attention_mask=None,
+              layer_norm_cond_inputs=None,
+              layer_norm_cond_hidden_size=None,
+              layer_norm_cond_hidden_act=None,
+              additional_inputs=None,
+              **kwargs):
+        pass
