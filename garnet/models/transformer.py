@@ -514,15 +514,21 @@ class Bert(Transformer):
                                                          **kwargs)
 
         attention_args = {
-            'head_mask': head_mask,
-            'attention_mask': attention_mask,
+            'head_mask': head_mask is not None,
+            'attention_mask': attention_mask is not None,
             'encoder_hidden_context': encoder_hidden_context,
             'encode_attention_mask': encode_attention_mask,
         }
 
         # apply self-attention
+        x_inputs = [x, x, x]
+        if attention_mask is not None:
+            x_inputs.append(attention_mask)
+        if head_mask is not None:
+            x_inputs.append(head_mask)
+
         xt = self.apply(
-            inputs=[x, x, x],
+            inputs=x_inputs,
             layer=MultiHeadAttention,
             head_num=self.num_attention_heads,
             head_size=self.attention_head_size,
