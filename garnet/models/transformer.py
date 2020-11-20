@@ -937,8 +937,10 @@ class T5Encoder(T5Base):
         feed_forward_name = 'Encoder-Transformer-{}-FeedForward'.format(index)
         relative_position = self.compute_relative_position(inputs)
 
+        x = inputs
+
         xt = self.apply(
-            inputs=inputs if layer_norm_cond_inputs is None else [x, layer_norm_cond_inputs],
+            inputs=x if layer_norm_cond_inputs is None else [x, layer_norm_cond_inputs],
             layer=LayerNormalization,
             center=False,
             epsilon=1e-6,
@@ -947,6 +949,19 @@ class T5Encoder(T5Base):
             cond_hidden_activation=layer_norm_cond_hidden_act,
             cond_hidden_initializer=self.initializer,
             name='{}-Norm'.format(attention_name),
+        )
+
+        xt = self.apply(
+            inputs=[xt, xt, xt, relative_position],
+            layer=MultiHeadAttention,
+            head_num=self.num_attention_heads,
+            head_size=self.attention_head_size,
+            key_size=self.attention_key_size,
+            use_bias=False,
+            attention_scale=False,
+            kernel_initializer=self.initializer,
+            arguments={'relative_position': True},
+            name=attention_name
         )
 
 
