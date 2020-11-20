@@ -125,7 +125,7 @@ class AdaFactorOptimizer(keras.optimizers.Optimizer):
             # gradient truncate
             if self.clipping_threshold is not None:
                 u_rms = K.sqrt(K.mean(K.square(u)))
-                u /= K.maximum(1, u_rms / self.clipping_threshold)
+                u /= K.maximum(1., u_rms / self.clipping_threshold)
             # gradient momentum
             if self.beta1 is not None and self.beta1 > 0.0:
                 m = K.zeros(shape, dtype=dtype, name='m_'.format(i))
