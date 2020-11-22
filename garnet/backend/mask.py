@@ -46,8 +46,27 @@ def sequence_masking(seq, mask=None, mode='add', axis=1):
         raise ValueError("`mode` must one of (`mul`, 'add'), got {} instead".format(mode))
 
 
+def language_model_mask(x):
+    r"""Lower triangular attention mask, used for language model.
+
+    Position below diagonal will be marked as `1`, which means not masked.
+
+    Argument:
+        :param x: segment ids with shape (batch_size, seq_length)
+
+    Return:
+        mask tensor with shape (1, 1, seq_length, seq_length), and second dimension usually means head nums
+        in Bert-like model.
+    """
+    seq_length = K.shape(x)[1]
+    indices = K.arange(0, seq_length)
+    mask = indices[None, :] <= indices[:, None]
+    mask = K.cast(mask, K.floatx())
+    return mask[None, None]
+
+
 def unilm_mask(x):
-    """UniLM attention mask, used for seq2seq model.
+    r"""UniLM attention mask, used for seq2seq model.
 
     See more at https://arxiv.org/abs/1905.03197.
 

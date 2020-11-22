@@ -1016,9 +1016,180 @@ class T5Encoder(T5Base):
 
         return x
 
+    def apply_output_layers(self,
+                            inputs,
+                            layer_norm_cond_inputs=None,
+                            layer_norm_cond_hidden_size=None,
+                            layer_norm_cond_hidden_act=None,
+                            **kwargs):
+        x = self.apply(
+            inputs=inputs if layer_norm_cond_inputs is None else [inputs, layer_norm_cond_inputs],
+            layer=LayerNormalization,
+            center=False,
+            epsilon=1e-6,
+            conditional=layer_norm_cond_inputs is not None,
+            cond_hidden_units=layer_norm_cond_hidden_size,
+            cond_hidden_activation=layer_norm_cond_hidden_act,
+            cond_hidden_initializer=self.initializer,
+            name='Encoder-Output-Norm',
+        )
+
+        x = self.apply(
+            inputs=x,
+            layer=Dropout,
+            rate=self.hidden_dropout_prob,
+            name='Encoder-Output-Dropout'
+        )
+
+        return x
+
 
 class T5Decoder(T5Base):
-    pass
+    def __init__(self, with_lm=True, **kwargs):
+        super(T5Decoder, self).__init__(**kwargs)
+        self.with_lm = with_lm
+
+    def compute_attention_mask(self, inputs=None, **kwargs):
+        pass
+
+    def get_inputs(self, **kwargs):
+        context_in = self.apply(
+            layer=Input,
+            shape=(self.fixed_sequence_length, self.hidden_size),
+            name='Input-Context',
+        )
+
+        x_in = self.apply(
+            layer=Input,
+            shape=(self.fixed_sequence_length,),
+            name='Decoder-Input-Token',
+        )
+
+        return [context_in, x_in]
+
+    def apply_embeddings(self, inputs, **kwargs):
+        context, x = inputs
+
+        x = self.apply(
+            inputs=x,
+            layer=DenseEmbedding,
+            input_dim=self.vocab_size,
+            output_dim=self.embedding_size,
+            embeddings_initializer=self.initializer,
+            mask_zero=True,
+            name='Embedding-Token',
+        )
+
+        x = self.apply(
+            inputs=x,
+            layer=Dropout,
+            rate=self.hidden_dropout_prob,
+            name='Decoder-Embedding-Dropout',
+        )
+
+        if self.embedding_size != self.hidden_size:
+            x = self.apply(
+                inputs=x,
+                layer=Dense,
+                units=self.hidden_size,
+                kernel_initializer=self.initializer,
+                name='Decoder-Embedding-Mapping'
+            )
+
+        return [context, x]
+
+    def apply_main_layers(self, inputs, index, **kwargs):
+        r"""
+        In each layer, tensors flow in the following order:
+        Layer Normalization --> Attention1 --> Add --> Layer Normalization --> Attention2 --> Add -->
+        Layer Normalization --> Feed Forward --> Add
+        """
+        context, x = inputs
+
+        self_attention_name = 'Decoder-Transformer-{}-MultiHeadSelfAttention'.format(index)
+        cross_attention_name = 'Decoder-Transformer-{}-MultiHeadCrossAttention'.format(index)
+        feed_forward_name = 'Decoder-Transformer-{}-FeedForward'.format(index)
+
+        relative_position = self.compute_relative_position(inputs)
+
+        x = inputs
+
+        xt = self.apply(
+            inputs=x if layer_norm_cond_inputs is None else [x, layer_norm_cond_inputs],
+            layer=LayerNormalization,
+            center=False,
+            epsilon=1e-6,
+            conditional=layer_norm_cond_inputs is not None,
+            cond_hidden_units=layer_norm_cond_hidden_size,
+            cond_hidden_activation=layer_norm_cond_hidden_act,
+            cond_hidden_initializer=self.initializer,
+            name='{}-Norm'.format(attention_name),
+        )
+
+        xt = self.apply(
+            inputs=[xt, xt, xt, relative_position],
+            layer=MultiHeadAttention,
+            head_num=self.num_attention_heads,
+            head_size=self.attention_head_size,
+            key_size=self.attention_key_size,
+            use_bias=False,
+            attention_scale=False,
+            kernel_initializer=self.initializer,
+            arguments={'relative_position': 't5'},
+            name=attention_name,
+        )
+
+        if self.attention_dropout_prob:
+            xt = self.apply(
+                inputs=x,
+                layer=Dropout,
+                rate=self.attention_dropout_prob,
+                name='{}-Dropout'.format(attention_name),
+            )
+
+        x = self.apply(
+            inputs=[x, xt],
+            layer=Add,
+            name='{}-Add'.format(attention_name),
+        )
+
+        xt = self.apply(
+            inputs=x if layer_norm_cond_inputs is None else [x, layer_norm_cond_inputs],
+            layer=LayerNormalization,
+            center=False,
+            epsilon=1e-6,
+            conditional=layer_norm_cond_inputs is not None,
+            cond_hidden_units=layer_norm_cond_hidden_size,
+            cond_hidden_activation=layer_norm_cond_hidden_act,
+            cond_hidden_initializer=self.initializer,
+            name='{}-Norm'.format(feed_forward_name),
+        )
+
+        xt = self.apply(
+            inputs=xt,
+            layer=FeedForward,
+            units=self.intermediate_size,
+            activation=self.hidden_act,
+            use_bias=False,
+            kernel_initializer=self.initializer,
+            name=feed_forward_name,
+        )
+
+        if self.hidden_dropout_prob:
+            xt = self.apply(
+                inputs=xt,
+                layer=Dropout,
+                rate=self.hidden_dropout_prob,
+                name='{}-Dropout'.format(feed_forward_name),
+            )
+
+        x = self.apply(
+            inputs=[x, xt],
+            layer=Add,
+            name='{}-Add'.format(feed_forward_name),
+        )
+
+        return x
 
 
 class T5(T5Base):
