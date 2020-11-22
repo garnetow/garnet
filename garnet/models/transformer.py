@@ -960,9 +960,61 @@ class T5Encoder(T5Base):
             use_bias=False,
             attention_scale=False,
             kernel_initializer=self.initializer,
-            arguments={'relative_position': True},
-            name=attention_name
+            arguments={'relative_position': 't5'},
+            name=attention_name,
         )
+
+        if self.attention_dropout_prob:
+            xt = self.apply(
+                inputs=x,
+                layer=Dropout,
+                rate=self.attention_dropout_prob,
+                name='{}-Dropout'.format(attention_name),
+            )
+
+        x = self.apply(
+            inputs=[x, xt],
+            layer=Add,
+            name='{}-Add'.format(attention_name),
+        )
+
+        xt = self.apply(
+            inputs=x if layer_norm_cond_inputs is None else [x, layer_norm_cond_inputs],
+            layer=LayerNormalization,
+            center=False,
+            epsilon=1e-6,
+            conditional=layer_norm_cond_inputs is not None,
+            cond_hidden_units=layer_norm_cond_hidden_size,
+            cond_hidden_activation=layer_norm_cond_hidden_act,
+            cond_hidden_initializer=self.initializer,
+            name='{}-Norm'.format(feed_forward_name),
+        )
+
+        xt = self.apply(
+            inputs=xt,
+            layer=FeedForward,
+            units=self.intermediate_size,
+            activation=self.hidden_act,
+            use_bias=False,
+            kernel_initializer=self.initializer,
+            name=feed_forward_name,
+        )
+
+        if self.hidden_dropout_prob:
+            xt = self.apply(
+                inputs=xt,
+                layer=Dropout,
+                rate=self.hidden_dropout_prob,
+                name='{}-Dropout'.format(feed_forward_name),
+            )
+
+        x = self.apply(
+            inputs=[x, xt],
+            layer=Add,
+            name='{}-Add'.format(feed_forward_name),
+        )
+
+        return x
 
 
 class T5Decoder(T5Base):

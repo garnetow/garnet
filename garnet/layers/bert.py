@@ -425,6 +425,9 @@ class LayerNormalization(Layer):
 class FeedForward(Layer):
     r"""Feed forward layer, equivalent to two consecutive dense layer.
 
+    Args:
+        activation: activations will be applied on first dense layer. If `activation` is a list, then the first dense
+            layer will transfer into a GLU(Gated Linear Unit). See more in paper https://arxiv.org/abs/2002.05202
     """
 
     def __init__(self,
@@ -444,7 +447,10 @@ class FeedForward(Layer):
         self.units = units
         self.use_bias = use_bias
 
-        self.activation = keras.activations.get(activation)
+        if isinstance(activation, str):
+            activation = [activation]
+        self.activation = [keras.activations.get(act) for act in activation]
+
         self.kernel_initializer = keras.initializers.get(kernel_initializer)
         self.bias_initializer = keras.initializers.get(bias_initializer)
         self.kernel_regularizer = keras.regularizers.get(kernel_regularizer)
@@ -452,22 +458,25 @@ class FeedForward(Layer):
         self.kernel_constraint = keras.constraints.get(kernel_constraint)
         self.bias_constraint = keras.constraints.get(bias_constraint)
 
-        self.dense1, self.dense2 = None, None
+        self.dense1_0, self.dense2 = None, None
 
     def build(self, input_shape):
         output_dim = input_shape[-1]
 
-        self.dense1 = Dense(
-            units=self.units,
-            activation=self.activation,
-            use_bias=self.use_bias,
-            kernel_initializer=self.kernel_initializer,
-            kernel_regularizer=self.kernel_regularizer,
-            kernel_constraint=self.kernel_constraint,
-            bias_initializer=self.bias_initializer,
-            bias_regularizer=self.bias_regularizer,
-            bias_constraint=self.bias_constraint,
-        )
+        for i, act in enumerate(self.activation):
+            d = Dense(
+                units=self.units,
+                activation=act,
+                use_bias=self.use_bias,
+                kernel_initializer=self.kernel_initializer,
+                kernel_regularizer=self.kernel_regularizer,
+                kernel_constraint=self.kernel_constraint,
+                bias_initializer=self.bias_initializer,
+                bias_regularizer=self.bias_regularizer,
+                bias_constraint=self.bias_constraint,
+            )
+            setattr(self, 'dense1_{}'.format(i), d)
+
         self.dense2 = Dense(
             units=output_dim,
             activation=None,  # no activation in the second dense layer
@@ -484,7 +493,10 @@ class FeedForward(Layer):
 
     @recompute_grad
     def call(self, inputs):
-        x = self.dense1(inputs)
+        x = self.dense1_0(inputs)
+        for i in range(1, len(self.activation)):
+            x = x * getattr(self, 'dense1_{}'.format(i))(inputs)
+
         x = self.dense2(x)
         return x
 
@@ -492,7 +504,7 @@ class FeedForward(Layer):
         config = {
             'units': self.units,
             'use_bias': self.use_bias,
-            'activation': keras.activations.serialize(self.activation),
+            'activation': [keras.activations.serialize(act) for act in self.activation],
             'kernel_initializer': keras.initializers.serialize(self.kernel_initializer),
             'bias_initializer': keras.initializers.serialize(self.bias_initializer),
             'kernel_regularizer': keras.regularizers.serialize(self.kernel_regularizer),
