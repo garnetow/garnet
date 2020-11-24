@@ -52,7 +52,6 @@ def build_transformer_model(
     Model = model_mapping[model]
     if application == 'unilm':
         Model = extend_with_unified_language_model(Model)
-        configs['pooler_activation'] = 'linear'
     elif application == 'lm':
         Model = extend_with_language_model(Model)
 
