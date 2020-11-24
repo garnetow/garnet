@@ -9,6 +9,7 @@
 import re
 import typing
 import unicodedata
+import sentencepiece as spm
 
 from .base import StatefulUnit
 from .vocabulary import Vocabulary, BertVocabulary, SOS, EOS, UNK, PAD, MASK, SEP, CLS
@@ -87,7 +88,7 @@ class Tokenizer(StatefulUnit):
         return [t for t in text.split(' ') if t]
 
     def tokenize(self, text, max_length, truncate='post', padding='post'):
-        r"""Tokenize text into token sequence, and option can be chosen whether sequence should be truncated.s
+        r"""Tokenize text into token sequence, and option can be chosen whether sequence should be truncated.
 
         Argument:
             :param text: text string.
@@ -375,3 +376,20 @@ class BertTokenizer(Tokenizer):
             start = stop
 
         return tokens
+
+
+class SentencePieceTokenizer(BertTokenizer):
+    def __init__(self,
+                 sp_model_path,
+                 ignore_case=True,
+                 token_start=CLS,
+                 token_end=SEP,
+                 encoding='utf-8',
+                 max_length=None,
+                 simplified=False,
+                 start_tokens=None,
+                 extended_tokens=None,
+                 **kwargs):
+        super(SentencePieceTokenizer, self).__init__()
+        self.sp_model = spm.SentencePieceProcessor()
+        self.sp_model.Load(sp_model_path)
