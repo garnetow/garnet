@@ -9,7 +9,9 @@
 import json
 
 from .transformer import Bert
-from .unilm import extend_with_unified_language_model
+from .transformer import T5
+from .transformer_extend import extend_with_language_model
+from .transformer_extend import extend_with_unified_language_model
 
 
 def build_transformer_model(
@@ -38,12 +40,21 @@ def build_transformer_model(
 
     model_mapping = {
         'bert': Bert,
+        't5': T5,
     }
 
-    Model = model_mapping[model.lower()]
+    # compatibility check
+    model = model.lower()
+    application = application.lower()
+    if application in ('lm', 'unilm') and model in ('t5',):
+        raise ValueError("{} model can't be used as {} application".format(model, application))
+
+    Model = model_mapping[model]
     if application == 'unilm':
         Model = extend_with_unified_language_model(Model)
         configs['pooler_activation'] = 'linear'
+    elif application == 'lm':
+        Model = extend_with_language_model(Model)
 
     transformer = Model(**configs)
     transformer.build(**configs)

@@ -55,14 +55,13 @@ def language_model_mask(x):
         :param x: segment ids with shape (batch_size, seq_length)
 
     Return:
-        mask tensor with shape (1, 1, seq_length, seq_length), and second dimension usually means head nums
-        in Bert-like model.
+        mask tensor with shape (1, seq_length, seq_length)
     """
     seq_length = K.shape(x)[1]
     indices = K.arange(0, seq_length)
     mask = indices[None, :] <= indices[:, None]
     mask = K.cast(mask, K.floatx())
-    return mask[None, None]
+    return mask[None]
 
 
 def unilm_mask(x):

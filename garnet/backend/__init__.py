@@ -8,3 +8,4 @@
 
 from .mask import sequence_masking
 from .mask import unilm_mask
+from .mask import language_model_mask
