@@ -178,10 +178,11 @@ class BaseTokenizer(StatefulUnit):
         raise NotImplementedError
 
 
-class BertLikeTokenizer(BaseTokenizer):
-    r"""Tokenizer used for bert-like models.
+class VocabTokenizer(BaseTokenizer):
+    r"""Tokenizer which tokenize text into token with the help of vocabulary.
 
     Arguments:
+        vocab: (:obj:`Vocabulary`, optional, default: `None`) vocabulary instance.
         vocab_path: (:obj:`str`, optional, default: `None`) vocabulary file path. Usually contained in pre-trained
             bert-like model package.
         encoding: (:obj:`str`, optional, default: `'utf-8'`) encoding of vocabulary file.
@@ -196,14 +197,37 @@ class BertLikeTokenizer(BaseTokenizer):
     """
 
     def __init__(self,
+                 vocab=None,
                  vocab_path=None,
-                 token_start=CLS,
-                 token_end=SEP,
                  encoding='utf-8',
                  simplified=False,
                  keep_tokens=None,
                  start_tokens=None,
                  extended_tokens=None,
+                 **kwargs):
+        super(VocabTokenizer, self).__init__(**kwargs)
+        self.vocab = None
+
+        if vocab is not None or vocab_path is not None:
+            self.fit(
+                vocab=vocab,
+                vocab_path=vocab_path,
+                encoding=encoding,
+                simplified=simplified,
+                keep_tokens=keep_tokens,
+                start_tokens=start_tokens,
+                extended_tokens=extended_tokens,
+                **kwargs
+            )
+
+
+class BertLikeTokenizer(VocabTokenizer):
+    r"""Tokenizer used for bert-like models.
+    """
+
+    def __init__(self,
+                 token_start=CLS,
+                 token_end=SEP,
                  **kwargs):
         kwargs['token_pad'] = PAD
         kwargs['token_unknown'] = UNK
@@ -211,3 +235,21 @@ class BertLikeTokenizer(BaseTokenizer):
         super(BertLikeTokenizer, self).__init__(token_start=token_start,
                                                 token_end=token_end,
                                                 **kwargs)
+        self.token_sep = SEP
+        self.token_cls = CLS
+
+    @property
+    def sep(self):
+        return self.token_sep
+
+    @property
+    def sep_id(self):
+        return self.token2id(self.sep)
+
+    @property
+    def cls(self):
+        return self.token_cls
+
+    @property
+    def cls_id(self):
+        return self.token2id(self.cls)
