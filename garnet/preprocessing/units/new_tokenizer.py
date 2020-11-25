@@ -179,9 +179,35 @@ class BaseTokenizer(StatefulUnit):
 
 
 class BertLikeTokenizer(BaseTokenizer):
+    r"""Tokenizer used for bert-like models.
+
+    Arguments:
+        vocab_path: (:obj:`str`, optional, default: `None`) vocabulary file path. Usually contained in pre-trained
+            bert-like model package.
+        encoding: (:obj:`str`, optional, default: `'utf-8'`) encoding of vocabulary file.
+        simplified: (:obj:`bool`, optional, default: `False`) whether simplify original vocabulary. Can't be used in
+            the same time with :arg:`keep_tokens`.
+        keep_tokens: (:obj:`list`, optional, default: `None`) simplified tokens list obtained from original vocabulary.
+            Can't be used in the same time with :arg:`simplified`.
+        start_tokens: (:obj:`list`, optional, default: `None`) vocabulary starts with these tokens, that is to say
+            they will have smallest token indices.
+        extended_tokens: (:obj:`list`, optional, default: `None`) vocabulary ends with these tokens, that is to say
+            they will have largest token indices.
+    """
+
     def __init__(self,
                  vocab_path=None,
                  token_start=CLS,
                  token_end=SEP,
+                 encoding='utf-8',
+                 simplified=False,
+                 keep_tokens=None,
+                 start_tokens=None,
+                 extended_tokens=None,
                  **kwargs):
-        pass
+        kwargs['token_pad'] = PAD
+        kwargs['token_unknown'] = UNK
+        kwargs['token_mask'] = MASK
+        super(BertLikeTokenizer, self).__init__(token_start=token_start,
+                                                token_end=token_end,
+                                                **kwargs)
