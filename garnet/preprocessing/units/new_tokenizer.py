@@ -220,6 +220,13 @@ class VocabTokenizer(BaseTokenizer):
                 **kwargs
             )
 
+    @property
+    def vocab_size(self):
+        try:
+            return len(self.vocab)
+        except Exception:
+            return
+
 
 class BertLikeTokenizer(VocabTokenizer):
     r"""Tokenizer used for bert-like models.
