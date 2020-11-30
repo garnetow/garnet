@@ -8,7 +8,7 @@
 
 import unittest
 
-from garnet.preprocessing import BertTokenizer
+from garnet.preprocessing import BertLikeTokenizer
 from garnet.utils.strings import is_cjk_character, is_punctuation_character
 
 
@@ -17,7 +17,7 @@ class TokenizerSimplifyTestCase(unittest.TestCase):
         dict_path = '../models/chinese_wwm_ext_L-12_H-768_A-12/vocab.txt'
         token = '[unused1]'
 
-        tokenizer = BertTokenizer(dict_path, simplified=True, start_tokens=['[PAD]', '[UNK]', '[CLS]', '[SEP]'])
+        tokenizer = BertLikeTokenizer(dict_path, simplified=True, start_tokens=['[PAD]', '[UNK]', '[CLS]', '[SEP]'])
 
         for char in tokenizer.vocab.stem(token):
             r1, r2 = is_cjk_character(char), is_punctuation_character(char)

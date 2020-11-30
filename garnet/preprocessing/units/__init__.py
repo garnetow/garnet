@@ -9,5 +9,6 @@
 from .vocabulary import Vocabulary
 from .vocabulary import BertVocabulary
 
-from .tokenizer import Tokenizer
-from .tokenizer import BertTokenizer
+from .tokenizer import BaseTokenizer
+from .tokenizer import VocabTokenizer
+from .tokenizer import BertLikeTokenizer

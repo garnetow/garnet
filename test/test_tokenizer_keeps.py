@@ -1,22 +1,31 @@
 # coding: utf-8
 
 """
-@File   : test_tokenizer.py
+@File   : test_tokenizer_keeps.py
 @Author : garnet
-@Time   : 2020/10/19 23:37
+@Time   : 2020/11/30 23:13
 """
 
+import json
 import unittest
-from bert4keras.tokenizers import Tokenizer
+from bert4keras.tokenizers import Tokenizer, load_vocab
 from garnet.preprocessing.units.tokenizer import BertLikeTokenizer
 
 
 class TokenizerTestCase(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
-        vocab_path = '../models/chinese_wwm_ext_L-12_H-768_A-12/vocab.txt'
-        cls.my_tokenizer = BertLikeTokenizer(vocab_path, ignore_case=True)
-        cls.sjl_tokenizer = Tokenizer(vocab_path, do_lower_case=True)
+        vocab_path = '../models/mixed_corpus_bert_base_model/vocab.txt'
+        keep_path = '../models/mixed_corpus_bert_base_model/token_dict_keep_tokens.json'
+
+        token_dict, keep_tokens = json.load(open(keep_path))
+        cls.my_tokenizer = BertLikeTokenizer(vocab_path, keep_tokens=keep_tokens, ignore_case=True)
+        cls.sjl_tokenizer = Tokenizer(token_dict, do_lower_case=True)
+
+    def test_length(self):
+        size1 = self.my_tokenizer.vocab_size
+        size2 = self.sjl_tokenizer._vocab_size
+        self.assertEqual(size1, size2)
 
     def test_single_chinese(self):
         text = '科学技术是第一生产力'
@@ -64,7 +73,8 @@ Simple Definition: Machine learning is an application of artificial intelligence
         vocab2 = self.sjl_tokenizer._token_dict
         self.assertEqual(len(vocab1), len(vocab2))
         print(len(vocab1))
-        for k1, k2 in zip(vocab1, vocab2):
+
+        for k1, k2 in zip(sorted(vocab1.items(), key=lambda x: x[1]), sorted(vocab2.items(), key=lambda x: x[1])):
             self.assertEqual(k1, k2)
 
 

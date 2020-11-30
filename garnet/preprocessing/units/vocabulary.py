@@ -48,6 +48,9 @@ class Vocabulary(StatefulUnit):
         self._vocab = dict()
         self._vocab_reverse = dict()
 
+    def __len__(self):
+        return len(self.vocab)
+
     def update_special_set(self):
         self._special_tokens = set([token for token in [self._token_start, self._token_end, self._token_pad,
                                                         self._token_unk, self._token_mask] if token is not None])
@@ -268,13 +271,17 @@ class BertVocabulary(Vocabulary):
                  extended_tokens=None,
                  ignore_case=False,
                  **kwargs):
+        if 'token_unknown' not in kwargs:
+            kwargs['token_unknown'] = UNK
+        if 'token_pad' not in kwargs:
+            kwargs['token_pad'] = PAD
+        if 'token_mask' not in kwargs:
+            kwargs['token_mask'] = MASK
+
         super(BertVocabulary, self).__init__(
             ignore_case=ignore_case,
             token_start=token_start,
             token_end=token_end,
-            token_unknown=UNK,
-            token_pad=PAD,
-            token_mask=MASK,
             **kwargs
         )
 
@@ -335,7 +342,7 @@ class BertVocabulary(Vocabulary):
             reversed_raw_vocab = {v: k for k, v in raw_vocab.items()}
             for index in raw_token_indices:
                 token = reversed_raw_vocab[index]
-                vocab[token] = index
+                vocab[token] = len(vocab)
         else:
             vocab = raw_vocab
 
