@@ -6,9 +6,16 @@
 @Time   : 2020/11/24 23:21
 """
 
+import re
+import typing
+import unicodedata
+import sentencepiece as spm
+
 from .base import StatefulUnit
 from .vocabulary import Vocabulary, BertVocabulary
 from .vocabulary import SOS, EOS, UNK, PAD, MASK, SEP, CLS
+from ...utils.strings import CJK_PUNCTUATION
+from ...utils.strings import is_cjk_character, is_punctuation_character, is_space_character, is_control_character
 
 
 class BaseTokenizer(StatefulUnit):
@@ -222,15 +229,56 @@ class VocabTokenizer(BaseTokenizer):
 
     @property
     def vocab_size(self):
-        try:
-            return len(self.vocab)
-        except Exception:
-            return
+        return len(self.vocab)
+
+    def token2id(self, token):
+        return self.vocab[token]
+
+    def id2token(self, index):
+        return self.vocab.i2w(index)
+
+    def create_vocab(self,
+                     vocab_path,
+                     encoding='utf-8',
+                     simplified=False,
+                     keep_tokens=None,
+                     start_tokens=None,
+                     extended_tokens=None,
+                     **kwargs):
+        raise NotImplementedError
+
+    def fit(self,
+            vocab=None,
+            vocab_path=None,
+            encoding='utf-8',
+            simplified=False,
+            keep_tokens=None,
+            start_tokens=None,
+            extended_tokens=None,
+            **kwargs):
+        assert vocab is not None or vocab_path is not None, "`vocab` and `vocab_path` can't both be `None` at the " \
+                                                            "same time"
+        if vocab:
+            self.vocab = vocab
+        else:
+            self.vocab = self.create_vocab(
+                vocab_path,
+                encoding=encoding,
+                simplified=simplified,
+                keep_tokens=keep_tokens,
+                start_tokens=start_tokens,
+                extended_tokens=extended_tokens,
+                **kwargs
+            )
+
+        super(VocabTokenizer, self).fit(**kwargs)
 
 
 class BertLikeTokenizer(VocabTokenizer):
     r"""Tokenizer used for bert-like models.
     """
+
+    punctuation = r'+-/={(<[' + CJK_PUNCTUATION
 
     def __init__(self,
                  token_start=CLS,
@@ -260,3 +308,215 @@ class BertLikeTokenizer(VocabTokenizer):
     @property
     def cls_id(self):
         return self.token2id(self.cls)
+
+    def create_vocab(self,
+                     vocab_path,
+                     encoding='utf-8',
+                     simplified=False,
+                     keep_tokens=None,
+                     start_tokens=None,
+                     extended_tokens=None,
+                     **kwargs):
+        return BertVocabulary(
+            vocab_path,
+            token_start=self.start,
+            token_end=self.end,
+            encoding=encoding,
+            simplified=simplified,
+            keep_tokens=keep_tokens,
+            start_tokens=start_tokens,
+            extended_tokens=extended_tokens,
+            ignore_case=self.ignore_case,
+            **kwargs
+        )
+
+    @property
+    def keep_tokens(self):
+        return self.vocab.keep_tokens
+
+    def tokenize_performer(self, text, **kwargs):
+        if self.ignore_case:  # text clean process
+            text = unicodedata.normalize('NFD', text)
+            text = ''.join([ch for ch in text if unicodedata.category(ch) != 'Mn'])
+            text = text.lower()
+
+        spaced = ''
+        for ch in text:
+            if is_punctuation_character(ch) or is_cjk_character(ch):
+                spaced += ' ' + ch + ' '
+            elif is_space_character(ch):
+                spaced += ' '
+            elif is_control_character(ch) or ord(ch) == 0 or ord(ch) == 0xfffd:
+                continue
+            else:
+                spaced += ch  # number and alphabet letter will stick together
+
+        tokens = []
+        for word in spaced.strip().split():
+            tokens.extend(self._word_piece_tokenize(word))
+        return tokens
+
+    def _word_piece_tokenize(self, word):
+        r"""Divide normal word into sub-word.
+        """
+        if word in self.vocab:
+            return [word]
+
+        tokens = []
+        start, stop = 0, 0
+        while start < len(word):
+            stop = len(word)
+            sub = word[start:stop]
+            while stop > start:
+                sub = word[start:stop]
+                if start > 0:
+                    sub = '##' + sub
+                if sub in self.vocab:
+                    break
+                stop -= 1
+            if start == stop:
+                stop += 1
+            tokens.append(sub)
+            start = stop
+
+        return tokens
+
+    @staticmethod
+    def truncate_sequence_pairs(first_seq, second_seq=None, max_length=None, pop_index=-1):
+        second_seq = second_seq or []
+        while True:
+            total_length = len(first_seq) + len(second_seq)
+            if not max_length or total_length <= max_length:
+                break
+            elif len(first_seq) > len(second_seq):
+                first_seq.pop(pop_index)
+            else:
+                second_seq.pop(pop_index)
+        return first_seq, second_seq or None
+
+    def encode(self, first_text, second_text=None, max_length=None, first_length=None, second_length=None):
+        r"""
+        Argument:
+            :param first_text: string of first sentence.
+            :param second_text: string of second sentence. `None` is available.
+            :param max_length: length of total sequence.
+            :param first_length: length of tokens in first sentence.
+            :param second_length: length of tokens in second sentence.
+
+        Return:
+            Tuple. First element is token ids sequence, second element is segmentation ids sequence.
+        """
+
+        first_tokens = self.tokenize(first_text)
+        second_tokens = self.tokenize(second_text)[1:] if second_text is not None else None
+
+        max_length = max_length or self.max_length
+        if max_length:
+            first_tokens, second_tokens = self.truncate_sequence_pairs(first_tokens,
+                                                                       second_seq=second_tokens,
+                                                                       max_length=max_length,
+                                                                       pop_index=-2)
+
+        first_token_ids = self.tokens2ids(first_tokens)
+        if first_length is not None:
+            first_token_ids = self.sequence_fix_length(first_token_ids,
+                                                       max_length=first_length,
+                                                       truncate='post',
+                                                       padding='post')
+        first_segment_ids = [0] * len(first_token_ids)
+
+        if second_tokens:
+            second_token_ids = self.tokens2ids(second_tokens)
+            if second_length is not None:
+                second_token_ids = self.sequence_fix_length(second_token_ids,
+                                                            max_length=second_length,
+                                                            truncate='post',
+                                                            padding='post')
+            second_segment_ids = [1] * len(second_token_ids)
+
+            first_token_ids.extend(second_token_ids)
+            first_segment_ids.extend(second_segment_ids)
+        return first_token_ids, first_segment_ids
+
+    def transform(self, first_text, second_text=None, max_length=None, first_length=None, second_length=None):
+        return self.encode(
+            first_text,
+            second_text=second_text,
+            max_length=max_length,
+            first_length=first_length,
+            second_length=second_length,
+        )
+
+    def decode(self, indices, tokens=None):
+        tokens = tokens or self.ids2tokens(indices)
+        tokens = [token for token in tokens if not self.vocab.is_special_token(token)]
+
+        text = ""
+        for i, token in enumerate(tokens):
+            if token[:2] == '##':
+                text += token[2:]
+            elif len(token) == 1 and is_cjk_character(token):
+                text += token
+            elif len(token) == 1 and is_punctuation_character(token):
+                text += token + ' '
+            elif i > 0 and is_cjk_character(text[-1]):
+                text += token
+            else:
+                text += ' ' + token
+
+        text = re.sub(r' +', ' ', text)  # eliminate continuous space characters
+        text = re.sub(r'\' (re|m|s|t|ve|d|ll) ', '\'\\1 ', text)
+        punctuation_pattern = '|'.join([re.escape(p) for p in self.punctuation])
+        punctuation_pattern = '(%s) ' % punctuation_pattern
+        text = re.sub(punctuation_pattern, '\\1', text)
+        text = re.sub(r'(\d\.) (\d)', '\\1\\2', text)
+        return text.strip()
+
+    def reverse_transform(self, indices, tokens=None):
+        return self.decode(indices, tokens=tokens)
+
+    def rematch(self, text, tokens):
+        normalized_text, char_mapping = '', []
+        for i, ch in enumerate(text):
+            if self.ignore_case:
+                ch = unicodedata.normalize('NFD', ch)
+                ch = ''.join([c for c in ch if unicodedata.category(c) != 'Mn'])
+            ch = ''.join([
+                c for c in ch
+                if not (ord(c) == 0 or ord(c) == 0xfffd or is_control_character(c))
+            ])
+            normalized_text += ch
+            char_mapping.extend([i] * len(ch))
+        text = normalized_text.lower()
+
+        token_mapping, offset = [], 0
+        for token in tokens:
+            if self.vocab.is_special_token(token):
+                token_mapping.append([])
+            else:
+                token = self.vocab.stem(token)
+                start = text[offset:].index(token) + offset
+                end = start + len(token)
+                token_mapping.append(char_mapping[start:end])
+                offset = end
+
+        return token_mapping
+
+    def match_tokenize(self, text, max_length=None):
+        token = self.tokenize(text, max_length=max_length)
+        mapping = self.rematch(text, token)
+        return token, mapping
+
+
+class SentencePieceTokenizer(BertLikeTokenizer):
+    def __init__(self, model_path, **kwargs):
+        super(SentencePieceTokenizer, self).__init__(**kwargs)
+        self.model = spm.SentencePieceProcessor()
+        self.model.Load(model_path)
+
+        self.token_pad = self.model.IdToPiece(self.model.pad_id())
+        self.token_unknown = self.model.IdToPiece(self.model.unk_id())
+
+    @property
+    def vocab_size(self):
+        return self.model.GetPieceSize()

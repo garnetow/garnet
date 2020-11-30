@@ -263,6 +263,7 @@ class BertVocabulary(Vocabulary):
                  token_end=EOS,
                  encoding: str = 'utf-8',
                  simplified: bool = False,
+                 keep_tokens=None,
                  start_tokens=None,
                  extended_tokens=None,
                  ignore_case=False,
@@ -279,47 +280,64 @@ class BertVocabulary(Vocabulary):
 
         self.cls_token = CLS
         self.sep_token = SEP
-        self.simplified_mapping = None
+        self.keep_tokens = None
 
         if vocab_path is not None:
-            self.init_vocab(vocab_path,
-                            encoding=encoding,
-                            simplified=simplified,
-                            start_tokens=start_tokens,
-                            extended_tokens=extended_tokens)
+            self.init_vocab(
+                vocab_path,
+                encoding=encoding,
+                simplified=simplified,
+                keep_tokens=keep_tokens,
+                start_tokens=start_tokens,
+                extended_tokens=extended_tokens,
+            )
 
-    def init_vocab(self, vocab_path, encoding='utf-8', simplified=False, start_tokens=None, extended_tokens=None):
+    def init_vocab(self,
+                   vocab_path,
+                   encoding='utf-8',
+                   simplified=False,
+                   keep_tokens=None,
+                   start_tokens=None,
+                   extended_tokens=None):
         r"""
         Args:
             :param simplified: whether simplify raw bert vocabulary.
+            :param keep_tokens: `dict`. Indices mapping of raw and simplified.
             :param start_tokens: useful when `simplified` is `True`, pick out tokens in bert vocabulary, and simplified
                 vocabulary will start with these tokens.
             :param extended_tokens: other tokens which are not in the raw bert vocabulary. Add these token in the end
                 of vocabulary.
         """
-        vocab, raw_token_indices = dict(), None
+        raw_vocab = dict()
         with open(vocab_path, 'r', encoding=encoding) as f:
             for line in f:
                 token = line.split()
                 token = token[0] if token else line.strip()
-                vocab[token] = len(vocab)
+                raw_vocab[token] = len(raw_vocab)
 
+        vocab, raw_token_indices = dict(), []
         if simplified:
-            new_vocab, raw_token_indices = dict(), []
             if start_tokens:
                 for token in start_tokens:
-                    new_vocab[token] = len(new_vocab)
-                    raw_token_indices.append(vocab[token])
+                    vocab[token] = len(vocab)
+                    raw_token_indices.append(raw_vocab[token])
 
-            for token, index in sorted(vocab.items(), key=lambda x: x[1], reverse=False):
-                if token not in new_vocab:
+            for token, index in sorted(raw_vocab.items(), key=lambda x: x[1], reverse=False):
+                if token not in vocab:
                     if len(token) > 1:
                         if not all([True if not is_cjk_character(char) and not is_punctuation_character(char) else False
                                     for char in self.stem(token)]):
                             continue
-                    new_vocab[token] = len(new_vocab)
+                    vocab[token] = len(vocab)
                     raw_token_indices.append(index)
-            vocab = new_vocab
+        elif keep_tokens:
+            raw_token_indices = keep_tokens
+            reversed_raw_vocab = {v: k for k, v in raw_vocab.items()}
+            for index in raw_token_indices:
+                token = reversed_raw_vocab[index]
+                vocab[token] = index
+        else:
+            vocab = raw_vocab
 
         if extended_tokens is not None:
             for token in extended_tokens:
@@ -327,7 +345,7 @@ class BertVocabulary(Vocabulary):
                     vocab[token] = len(vocab)
 
         self._vocab = vocab
-        self.simplified_mapping = raw_token_indices
+        self.keep_tokens = raw_token_indices
         self.update_reverse_vocab()
         self.fitted = True
 
