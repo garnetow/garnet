@@ -16,6 +16,7 @@ from .vocabulary import Vocabulary, BertVocabulary
 from .vocabulary import SOS, EOS, UNK, PAD, MASK, SEP, CLS
 from ...utils.strings import CJK_PUNCTUATION
 from ...utils.strings import is_cjk_character, is_punctuation_character, is_space_character, is_control_character
+from ...utils.decorator import safe_return
 
 
 class BaseTokenizer(StatefulUnit):
@@ -417,7 +418,10 @@ class BertLikeTokenizer(VocabTokenizer):
         """
 
         first_tokens = self.tokenize(first_text)
-        second_tokens = self.tokenize(second_text)[1:] if second_text is not None else None
+        second_tokens = None
+        if second_text:
+            fid = int(bool(self.start))
+            second_tokens = self.tokenize(second_text)[fid:] if second_text is not None else None
 
         max_length = max_length or self.max_length
         if max_length:
@@ -519,7 +523,8 @@ class BertLikeTokenizer(VocabTokenizer):
 
 class SentencePieceTokenizer(BertLikeTokenizer):
     def __init__(self, model_path, **kwargs):
-        super(SentencePieceTokenizer, self).__init__(**kwargs)
+        kwargs['with_start'] = False
+        super(SentencePieceTokenizer, self).__init__(vocab_path=None, **kwargs)
         self.model = spm.SentencePieceProcessor()
         self.model.Load(model_path)
 
@@ -529,3 +534,43 @@ class SentencePieceTokenizer(BertLikeTokenizer):
     @property
     def vocab_size(self):
         return self.model.GetPieceSize()
+
+    @safe_return
+    @property
+    def start_id(self):
+        return self.model.PieceToId(self.start)
+
+    @safe_return
+    @property
+    def end_id(self):
+        return self.model.PieceToId(self.end)
+
+    @safe_return
+    @property
+    def pad_id(self):
+        return self.model.PieceToId(self.pad)
+
+    @safe_return
+    @property
+    def mask_id(self):
+        return self.model.PieceToId(self.mask)
+
+    @safe_return
+    @property
+    def unknown_id(self):
+        return self.model.PieceToId(self.unknown)
+
+    def token2id(self, token):
+        return self.model.PieceToId(token)
+
+    def id2token(self, index):
+        return self.model.IdToPiece(index) if index < self.vocab_size else ''
+
+    def tokenize_performer(self, text, **kwargs):
+        tokens = self.model.EncodeAsPieces(text)
+        return tokens
+
+    def decode(self, indices, tokens=None):
+        tokens = [token for token in self.ids2tokens(indices)]
+        text = self.model.DecodePieces(tokens)
+        return text

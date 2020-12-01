@@ -1,35 +1,27 @@
 # coding: utf-8
 
 """
-@File   : test_tokenizer.py
+@File   : test_tokenizer_t5.py
 @Author : garnet
-@Time   : 2020/10/19 23:37
+@Time   : 2020/12/1 11:26
 """
 
 import unittest
-from bert4keras.tokenizers import Tokenizer
-from garnet.preprocessing.units.tokenizer import BertLikeTokenizer
+from bert4keras.tokenizers import SpTokenizer
+from garnet.preprocessing import SentencePieceTokenizer
 
 
 class TokenizerTestCase(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
-        vocab_path = '../models/mixed_corpus_bert_base_model/vocab.txt'
-        cls.my_tokenizer = BertLikeTokenizer(vocab_path, ignore_case=True)
-        cls.raw_tokenizer = Tokenizer(vocab_path, do_lower_case=True)
+        model_path = '../models/mt5_base/sentencepiece_cn.model'
+        cls.raw_tokenizer = SpTokenizer(model_path, token_start=None, token_end='</s>')
+        cls.my_tokenizer = SentencePieceTokenizer(model_path, token_start=None, token_end='</s>')
 
     def test_length(self):
         size1 = self.my_tokenizer.vocab_size
         size2 = self.raw_tokenizer._vocab_size
         self.assertEqual(size1, size2)
-
-    def test_vocab(self):
-        vocab1 = self.my_tokenizer.vocab.vocab
-        vocab2 = self.raw_tokenizer._token_dict
-        self.assertEqual(len(vocab1), len(vocab2))
-        print(len(vocab1))
-        for k1, k2 in zip(vocab1, vocab2):
-            self.assertEqual(k1, k2)
 
     def test_single_chinese(self):
         text = '科学技术是第一生产力'

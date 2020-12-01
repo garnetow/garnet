@@ -877,7 +877,7 @@ class T5Encoder(T5Base):
         if self.relative_position is None:
             self.relative_position = self.apply(
                 inputs=[inputs, inputs],
-                layers=RelativePositionEmbeddingT5,
+                layer=RelativePositionEmbeddingT5,
                 input_dim=32,
                 output_dim=self.num_attention_heads,
                 bidirectional=True,
@@ -1056,11 +1056,11 @@ class T5Decoder(LanguageModelMixin, T5Base):
         return mask
 
     def compute_relative_position(self, inputs=None):
-        if self.relative_position:
+        if self.relative_position is None:
             context, x = inputs
             rp1 = self.apply(
                 inputs=[x, x],
-                layers=RelativePositionEmbeddingT5,
+                layer=RelativePositionEmbeddingT5,
                 input_dim=32,
                 output_dim=self.num_attention_heads,
                 bidirectional=False,

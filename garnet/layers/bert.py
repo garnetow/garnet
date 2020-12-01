@@ -202,7 +202,7 @@ class MultiHeadAttention(Layer):
         a = sequence_masking(a, value_mask, mode='add', axis=-1)
 
         # apply attention mask
-        if attention_mask is not None or attention_mask is not False:
+        if attention_mask is not None and attention_mask is not False:
             att_mask_dim = K.ndim(attention_mask)
             if att_mask_dim == 3:
                 attention_mask = K.expand_dims(attention_mask, axis=1)
@@ -212,7 +212,7 @@ class MultiHeadAttention(Layer):
         a = K.softmax(a, axis=-1)
 
         # apply head mask
-        if not head_mask is not None or head_mask is not False:
+        if head_mask is not None and head_mask is not False:
             # head_mask with shape (num_heads,)
             head_mask = K.expand_dims(K.expand_dims(K.expand_dims(head_mask, axis=0), axis=-1), axis=-1)
             a = a * head_mask

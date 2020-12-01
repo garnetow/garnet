@@ -12,3 +12,4 @@ from .vocabulary import BertVocabulary
 from .tokenizer import BaseTokenizer
 from .tokenizer import VocabTokenizer
 from .tokenizer import BertLikeTokenizer
+from .tokenizer import SentencePieceTokenizer
