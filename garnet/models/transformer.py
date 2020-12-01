@@ -1360,12 +1360,20 @@ class T5(T5Base):
             decoder_name = '{}_{}'.format(kwargs['name'], decoder_name)
             del kwargs['name']
 
-        self.encoder = T5Encoder(name=encoder_name, **kwargs)
-        self.decoder = T5Decoder(name=decoder_name, **kwargs)
+        self.encoder_model = T5Encoder(name=encoder_name, **kwargs)
+        self.decoder_model = T5Decoder(name=decoder_name, **kwargs)
 
     def build(self, **kwargs):
-        self.encoder.build(**kwargs)
-        self.decoder.build(**kwargs)
-        self.inputs = self.encoder.inputs + self.decoder.inputs[1:]
-        self.outputs = self.decoder.model(self.encoder.outputs + self.decoder.inputs[1:])
+        self.encoder_model.build(**kwargs)
+        self.decoder_model.build(**kwargs)
+        self.inputs = self.encoder_model.inputs + self.decoder_model.inputs[1:]
+        self.outputs = self.decoder_model.model(self.encoder_model.outputs + self.decoder_model.inputs[1:])
         self.model = Model(self.inputs, self.outputs)
+
+    @property
+    def encoder(self):
+        return self.encoder_model.model
+
+    @property
+    def decoder(self):
+        return self.decoder_model.model

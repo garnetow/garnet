@@ -25,7 +25,8 @@ class AutoRegressiveDecoder(object):
         self.end_index = end_index
         self.max_length = max_length
         self.min_length = min_length
-        self.first_output_index = np.array([[self.start_index]]) if self.start_index else np.empty((1, 0), dtype='int')
+        self.first_output_index = np.array([[self.start_index]]) if self.start_index is not None else \
+            np.empty((1, 0), dtype='int')
 
     @staticmethod
     def predict_wraps(default_return_type='probas', use_states=False):

@@ -564,7 +564,7 @@ class SentencePieceTokenizer(BertLikeTokenizer):
         return self.model.PieceToId(token)
 
     def id2token(self, index):
-        return self.model.IdToPiece(index) if index < self.vocab_size else ''
+        return self.model.IdToPiece(int(index)) if index < self.vocab_size else ''
 
     def tokenize_performer(self, text, **kwargs):
         tokens = self.model.EncodeAsPieces(text)
