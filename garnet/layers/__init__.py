@@ -15,6 +15,5 @@ from .bert import DenseEmbedding
 from .bert import PositionEmbedding
 
 from .loss import LossLayer
-from .loss import SecondSequenceCrossEntropy
 
 from .simbert import SimBertLoss
