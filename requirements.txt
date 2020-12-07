@@ -15,8 +15,6 @@ Keras-Preprocessing
 Markdown
 protobuf
 six
-tensorboard
-tensorflow-estimator
 termcolor
 Werkzeug
 wrapt
