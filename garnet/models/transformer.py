@@ -153,10 +153,9 @@ class Transformer(WrappedModel):
         # get inputs
         inputs = self.get_inputs(
             input_embeds=input_embeds,
-            additional_inputs=additional_inputs,
             **kwargs
         )
-        self.set_inputs(inputs)
+        self.set_inputs(inputs, additional_inputs=additional_inputs)
 
         # apply embedding layer
         outputs = self.apply_embeddings(
@@ -232,15 +231,21 @@ class Transformer(WrappedModel):
     def apply_output_layers(self, inputs, **kwargs):
         raise NotImplementedError
 
-    def set_inputs(self, inputs):
+    def set_inputs(self, inputs, additional_inputs=None):
         if inputs is None:
             inputs = []
         elif not isinstance(inputs, list):
             inputs = [inputs]
 
         inputs = inputs[:]  # shallow copy
-        self.inputs = inputs
 
+        if additional_inputs is not None:
+            if isinstance(additional_inputs, list):
+                inputs.extend(additional_inputs)
+            else:
+                inputs.append(additional_inputs)
+
+        self.inputs = inputs
         if len(inputs) > 1:
             self.input = self.inputs
         elif len(inputs) == 1:
@@ -369,7 +374,6 @@ class Bert(Transformer):
 
     def get_inputs(self,
                    input_embeds=None,
-                   additional_inputs=None,
                    **kwargs):
         inputs = []
         if input_embeds is None:
@@ -388,11 +392,6 @@ class Bert(Transformer):
             )
             inputs.append(seg_in)
 
-        if additional_inputs is not None:
-            if isinstance(additional_inputs, list):
-                inputs.extend(additional_inputs)
-            else:
-                inputs.append(additional_inputs)
         return inputs
 
     def apply_embeddings(self,
@@ -886,23 +885,14 @@ class T5Encoder(T5Base):
             )
         return self.relative_position
 
-    def get_inputs(self, additional_inputs=None, **kwargs):
-        inputs = []
-
+    def get_inputs(self, **kwargs):
         x_token = self.apply(
             layer=Input,
             shape=(self.fixed_sequence_length,),
             name='Encoder-Input-Token'
         )
-        inputs.append(x_token)
 
-        if additional_inputs is not None:
-            if isinstance(additional_inputs, list):
-                inputs.extend(additional_inputs)
-            else:
-                inputs.append(additional_inputs)
-
-        return inputs
+        return x_token
 
     def apply_embeddings(self, inputs, **kwargs):
         x = self.apply(
