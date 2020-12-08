@@ -6,8 +6,9 @@
 @Time   : 2020/9/29 8:48
 """
 
-import numpy as np
+import copy
 import keras
+import numpy as np
 import tensorflow as tf
 import keras.backend as K
 from keras.models import Model
@@ -1364,9 +1365,49 @@ class T5(T5Base):
         self.decoder_model = T5Decoder(name=decoder_name, **kwargs)
 
     def build(self, **kwargs):
-        self.encoder_model.build(**kwargs)
-        self.decoder_model.build(**kwargs)
-        self.inputs = self.encoder_model.inputs + self.decoder_model.inputs[1:]
+        encoder_kwargs = copy.copy(kwargs)
+        decoder_kwargs = copy.copy(kwargs)
+
+        if 'additional_inputs' in kwargs:
+            total_additional_inputs = []
+            encoder_additional_inputs = []
+            decoder_additional_inputs = []
+            if 'encoder' in kwargs['additional_inputs']:
+                add_inputs = kwargs['additional_inputs']['encoder']
+                if isinstance(add_inputs, list):
+                    total_additional_inputs.extend(add_inputs)
+                    encoder_additional_inputs.extend(add_inputs)
+                else:
+                    total_additional_inputs.append(add_inputs)
+                    encoder_additional_inputs.append(add_inputs)
+            if 'decoder' in kwargs['additional_inputs']:
+                add_inputs = kwargs['additional_inputs']['decoder']
+                if isinstance(add_inputs, list):
+                    total_additional_inputs.extend(add_inputs)
+                    decoder_additional_inputs.extend(add_inputs)
+                else:
+                    total_additional_inputs.append(add_inputs)
+                    decoder_additional_inputs.append(add_inputs)
+            if 'both' in kwargs['additional_inputs']:
+                add_inputs = kwargs['additional_inputs']['both']
+                if isinstance(add_inputs, list):
+                    total_additional_inputs.extend(add_inputs)
+                    encoder_additional_inputs.extend(add_inputs)
+                    decoder_additional_inputs.extend(add_inputs)
+                else:
+                    total_additional_inputs.append(add_inputs)
+                    encoder_additional_inputs.append(add_inputs)
+                    decoder_additional_inputs.append(add_inputs)
+            encoder_kwargs['additional_inputs'] = encoder_additional_inputs or None
+            decoder_kwargs['additional_inputs'] = decoder_additional_inputs or None
+
+        self.encoder_model.build(**encoder_kwargs)
+        self.decoder_model.build(**decoder_kwargs)
+
+        inputs = self.encoder_model.inputs + self.decoder_model.inputs[1:]
+        if 'additional_inputs' in kwargs:
+            inputs = [i for i in inputs if i not in total_additional_inputs] + total_additional_inputs
+        self.inputs = inputs
         self.outputs = self.decoder_model.model(self.encoder_model.outputs + self.decoder_model.inputs[1:])
         self.model = Model(self.inputs, self.outputs)
 
