@@ -886,12 +886,22 @@ class T5Encoder(T5Base):
             )
         return self.relative_position
 
-    def get_inputs(self, **kwargs):
+    def get_inputs(self, additional_inputs=None, **kwargs):
+        inputs = []
+
         x_token = self.apply(
             layer=Input,
             shape=(self.fixed_sequence_length,),
             name='Encoder-Input-Token'
         )
+        inputs.append(x_token)
+
+        if additional_inputs is not None:
+            if isinstance(additional_inputs, list):
+                inputs.extend(additional_inputs)
+            else:
+                inputs.append(additional_inputs)
+
         return x_token
 
     def apply_embeddings(self, inputs, **kwargs):
