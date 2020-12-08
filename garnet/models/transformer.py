@@ -902,7 +902,7 @@ class T5Encoder(T5Base):
             else:
                 inputs.append(additional_inputs)
 
-        return x_token
+        return inputs
 
     def apply_embeddings(self, inputs, **kwargs):
         x = self.apply(
