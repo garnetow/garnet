@@ -8,8 +8,9 @@
 
 import keras
 import tensorflow as tf
-import keras.backend as K
 import numpy as np
+
+from ..backend import K
 
 
 def gelu_erf(x):

@@ -10,10 +10,10 @@ import copy
 import keras
 import numpy as np
 import tensorflow as tf
-import keras.backend as K
 from keras.models import Model
 from keras.layers import Input, Dense, Dropout, Add, Lambda, Activation
 
+from ..backend import K
 from .model import WrappedModel
 from .transformer_mixin import LanguageModelMixin
 from ..layers.core import BiasAdd

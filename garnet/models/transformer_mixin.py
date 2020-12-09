@@ -6,9 +6,9 @@
 @Time   : 2020/11/24 11:35
 """
 
-import keras.backend as K
 from keras.layers import Lambda
 
+from ..backend import K
 from ..backend import unilm_mask
 from ..backend import language_model_mask
 

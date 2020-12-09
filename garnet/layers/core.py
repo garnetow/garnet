@@ -7,8 +7,9 @@
 """
 
 import keras
-import keras.backend as K
 from keras.layers import Layer
+
+from ..backend import K
 
 
 class BiasAdd(Layer):

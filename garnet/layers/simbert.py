@@ -7,9 +7,9 @@
 """
 
 import keras
-import keras.backend as K
 
 from .loss import LossLayer
+from ..backend import K
 
 
 class SimBertLoss(LossLayer):

@@ -7,9 +7,9 @@
 """
 
 import keras
-import keras.backend as K
 import numpy as np
 
+from ..backend import K
 from .position import RelativePositionEmbedding
 
 

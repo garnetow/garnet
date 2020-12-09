@@ -7,8 +7,9 @@
 """
 
 import keras
-import keras.backend as K
 import tensorflow as tf
+
+from ..backend import K
 
 
 def binary_focal_loss(gamma=2., alpha=.25):

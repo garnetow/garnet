@@ -8,9 +8,9 @@
 
 import keras
 import tensorflow as tf
-import keras.backend as K
 from keras.layers import Layer, Dense, Embedding
 
+from ..backend import K
 from ..backend.mask import sequence_masking
 from ..backend.recompute import recompute_grad
 

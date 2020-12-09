@@ -6,7 +6,7 @@
 @Time   : 2020/10/12 8:48
 """
 
-import keras.backend as K
+from ..backend import K
 
 
 def sequence_masking(seq, mask=None, mode='add', axis=1):

@@ -7,8 +7,9 @@
 """
 
 import keras
-import keras.backend as K
 import numpy as np
+
+from ..backend import K
 
 
 class AdaFactorOptimizer(keras.optimizers.Optimizer):

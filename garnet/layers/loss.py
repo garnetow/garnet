@@ -6,8 +6,9 @@
 @Time   : 2020/10/21 15:39
 """
 
-import keras.backend as K
 from keras.layers import Layer
+
+from ..backend import K
 
 
 class LossLayer(Layer):

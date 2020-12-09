@@ -8,13 +8,13 @@
 
 import random
 import keras
-import keras.backend as K
 import numpy as np
 import tensorflow as tf
 from keras.models import Model
 from keras.optimizers import Nadam
 
-from garnet.preprocessing import BertTokenizer
+from garnet.backend import K
+from garnet.preprocessing import BertLikeTokenizer
 from garnet.models.build import build_transformer_model
 from garnet.layers import SimBertLoss
 
@@ -71,7 +71,7 @@ if __name__ == '__main__':
     checkpoint_path = bert_path + 'bert_model.ckpt'
     dict_path = bert_path + 'vocab.txt'
 
-    tokenizer = BertTokenizer(dict_path, ignore_case=True)
+    tokenizer = BertLikeTokenizer(dict_path, ignore_case=True)
     collator = SimBertCollator(tokenizer)
 
     model = build_transformer_model(config_path,
