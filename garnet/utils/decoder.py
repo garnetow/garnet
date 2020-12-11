@@ -35,8 +35,8 @@ class AutoRegressiveDecoder(object):
 
         def decorator(predict):
             @wraps(predict)
-            def wrapper(self, inputs, output_indices, states=None, return_type=default_return_type):
-                res = predict(self, inputs, output_indices, states=states, return_type=return_type)
+            def wrapper(self, inputs, output_indices, states=None, return_type=default_return_type, **kwargs):
+                res = predict(self, inputs, output_indices, states=states, return_type=return_type, **kwargs)
                 if not use_states:
                     res = (res, None)
 
@@ -51,7 +51,7 @@ class AutoRegressiveDecoder(object):
 
         return decorator
 
-    def predict(self, inputs, output_indices, states=None, return_type='probas'):
+    def predict(self, inputs, output_indices, states=None, return_type='probas', **kwargs):
         r"""Custom prediction method.
 
         Predict probas or logits of the next token in given samples.
@@ -66,7 +66,7 @@ class AutoRegressiveDecoder(object):
         """
         raise NotImplementedError
 
-    def random_sample(self, inputs, n, top_k=None, top_p=None, states=None, min_ends_per_sample=1):
+    def random_sample(self, inputs, n, top_k=None, top_p=None, states=None, min_ends_per_sample=1, **kwargs):
         r"""Generate next sentence using random sample method.
 
         Get more information in below webs:
@@ -94,7 +94,13 @@ class AutoRegressiveDecoder(object):
         output_indices = np.repeat(self.first_output_index, n, axis=0)
 
         for step in range(self.max_length):
-            probas, states = self.predict(inputs, output_indices=output_indices, states=states, return_type='probas')
+            probas, states = self.predict(
+                inputs,
+                output_indices=output_indices,
+                states=states,
+                return_type='probas',
+                **kwargs
+            )
             probas /= probas.sum(axis=1, keepdims=True)  # probas normalization
 
             if top_k:
@@ -139,7 +145,7 @@ class AutoRegressiveDecoder(object):
             result.append(index_sequence)
         return result
 
-    def beam_search(self, inputs, return_k, cache_k=None, states=None, min_ends_per_sample=1, mode='total'):
+    def beam_search(self, inputs, return_k, cache_k=None, states=None, min_ends_per_sample=1, mode='total', **kwargs):
         r"""Generate next sentence using beam search method.
 
         Args:
@@ -161,7 +167,13 @@ class AutoRegressiveDecoder(object):
         output_indices = self.first_output_index
         output_scores = np.zeros(1)
         for step in range(self.max_length):
-            scores, states = self.predict(inputs, output_indices=output_indices, states=states, return_type='logits')
+            scores, states = self.predict(
+                inputs,
+                output_indices=output_indices,
+                states=states,
+                return_type='logits',
+                **kwargs
+            )
 
             scores = output_scores.reshape((-1, 1)) + scores  # accumulated token scores
             indices = scores.argpartition(-cache_k, axis=None)[-cache_k:]  # flatten array
