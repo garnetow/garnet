@@ -6,11 +6,8 @@
 @Time   : 2020/12/17 16:09
 """
 
-import keras
-
 from ..backend import K
 from ..utils.snippets import contain
-from ..utils.strings import keyword_match
 
 
 def extend_with_layerwise_lr(BaseOptimizer):
