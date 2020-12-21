@@ -36,10 +36,10 @@ def extend_with_piecewise_lr(BaseOptimizer):
             schedule = sorted(lr_schedule.items())
             if len(schedule) == 0 or schedule[0][0] != 0:
                 schedule = [(0, 0.0)] + schedule
-            self.lr_schedule = schedule
+            self.schedule = schedule
 
         def piecewise_linear(self, epoch):
-            x = K.constant(self.lr_schedule[0][1], dtype=K.floatx())
+            x = K.constant(self.schedule[0][1], dtype=K.floatx())
             t = K.cast(epoch, K.floatx())
 
             for i in range(len(self.schedule)):
@@ -82,7 +82,7 @@ def extend_with_piecewise_lr(BaseOptimizer):
 
         def get_config(self):
             config = {
-                'lr_schedule': self.lr_schedule,
+                'schedule': self.schedule,
             }
             base_config = super(PiecewiseLrOptimizer, self).get_config()
             return dict(list(base_config.items()) + list(config.items()))
