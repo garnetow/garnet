@@ -11,3 +11,4 @@ from .strings import *
 from .sequence import *
 from .functions import softmax
 from .functions import truncated_normal
+from .trie import DoubleArrayTrie, ChineseTrie
