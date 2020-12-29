@@ -25,6 +25,8 @@ class MultiHeadAttention(Layer):
         :param use_bias (bool, optional, default: `True`): Whether to use bias term.
         :param attention_scale (bool, optional, default: `True`): whether apply scale on attention matrix.
         :param activation: Activations for linear mappings.
+        :param use_real_former: (:obj:`bool`, optional, default: False)
+            whether to use [RealFormer](https://arxiv.org/abs/2012.11747) structure.
         :param kernel_initializer: Initializer for linear mappings.
         :param bias_initializer: Initializer for linear mappings.
         :param kernel_regularizer: Regularizer for linear mappings.
@@ -41,6 +43,7 @@ class MultiHeadAttention(Layer):
                  use_bias=True,
                  attention_scale=True,
                  activation=None,
+                 use_real_former=False,
                  kernel_initializer='glorot_normal',
                  bias_initializer='zeros',
                  kernel_regularizer=None,
@@ -57,6 +60,7 @@ class MultiHeadAttention(Layer):
         self.key_size = key_size or head_size
         self.use_bias = use_bias
         self.attention_scale = attention_scale
+        self.use_real_former = use_real_former
 
         self.activation = keras.activations.get(activation)
         self.kernel_initializer = keras.initializers.get(kernel_initializer)
@@ -122,8 +126,6 @@ class MultiHeadAttention(Layer):
              attention_mask=None,
              relative_position=None,
              head_mask=None,
-             encoder_hidden_context=None,
-             encode_attention_mask=None,
              **kwargs):
         """
         Full inputs order:
@@ -133,6 +135,7 @@ class MultiHeadAttention(Layer):
         - attention mask: (batch_size, query_length, key_length) or (batch_size, 1, query_length, key_length)
         - relative position: (query_seq_len, key_seq_len, num_heads)
         - head mask: (num_heads,)
+        - former layer attention: (batch_size, query_length, key_length)
         """
 
         num_inputs = 3
@@ -159,11 +162,10 @@ class MultiHeadAttention(Layer):
         if head_mask:
             head_mask = inputs[num_inputs]
             num_inputs += 1
-        if encoder_hidden_context:
-            encoder_hidden_context = inputs[num_inputs]
-            num_inputs += 1
-        if encode_attention_mask:
-            encode_attention_mask = inputs[num_inputs]
+
+        former_attention = None
+        if self.use_real_former:
+            former_attention = inputs[num_inputs]
             num_inputs += 1
 
         # linear transformation
@@ -208,6 +210,11 @@ class MultiHeadAttention(Layer):
                 attention_mask = K.expand_dims(attention_mask, axis=1)
             a -= (1 - attention_mask) * 1e12
 
+        a_current = None
+        if self.use_real_former:
+            a += former_attention
+            a_current = a
+
         # apply softmax on each query sequence steps
         a = K.softmax(a, axis=-1)
 
@@ -224,18 +231,27 @@ class MultiHeadAttention(Layer):
 
         # apply query sequence mask
         o = sequence_masking(o, query_mask, mode='mul', axis=1)
+
+        if self.use_real_former:
+            return o, a_current
+
         return o
 
     def compute_output_shape(self, input_shape):
         if isinstance(input_shape, list):
-            batch_size, sequence_length = input_shape[0][0], input_shape[0][1]
+            batch_size, query_length, key_length = input_shape[0][0], input_shape[0][1], input_shape[1][1]
         else:
-            batch_size, sequence_length = input_shape[0], input_shape[1]
-        return batch_size, sequence_length, self.output_dim
+            batch_size, query_length, key_length = input_shape[0], input_shape[1], input_shape[1]
+
+        if self.use_real_former:
+            return [(batch_size, query_length, self.output_dim),
+                    (batch_size, self.head_num, query_length, key_length), ]
+        return batch_size, query_length, self.output_dim
 
     def compute_mask(self, inputs, mask=None):
-        if isinstance(mask, list):
-            return mask[0]
+        mask = mask[0] if isinstance(mask, list) else mask
+        if self.use_real_former:
+            return [mask, None]
         return mask
 
     def get_config(self):
@@ -247,6 +263,7 @@ class MultiHeadAttention(Layer):
             'use_bias': self.use_bias,
             'attention_scale': self.attention_scale,
             'activation': keras.activations.serialize(self.activation),
+            'use_real_former': self.use_real_former,
             'kernel_initializer': keras.initializers.serialize(self.kernel_initializer),
             'bias_initializer': keras.initializers.serialize(self.bias_initializer),
             'kernel_regularizer': keras.regularizers.serialize(self.kernel_regularizer),

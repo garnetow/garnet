@@ -8,3 +8,4 @@
 
 from .focal import binary_focal_loss
 from .focal import categorical_focal_loss
+from .focal import sparse_categorical_focal_loss

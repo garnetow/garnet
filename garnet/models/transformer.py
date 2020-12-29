@@ -344,7 +344,8 @@ class Bert(Transformer):
                  with_nsp=False,  # 输出是否增加 Next Sentence Prediction 部分
                  with_mlm=False,  # 输出是否增加 Masked Language Model 部分
                  pooler_dense=True,  # [CLS]输出是否经过Dense层转换
-                 pooler_activation='tanh',
+                 pooler_activation='tanh',  # [CLS]输出转换的Dense层使用的激活函数, 与`pooler_dense`参数配合使用
+                 use_real_former=False,  # 是否使用RealFormer结构
                  shared_segment_embeddings=False,  # segment跟token是否共享embedding参数
                  **kwargs):
         r"""Bert model. See more in [Attention is all you need](https://arxiv.org/abs/1706.03762).
@@ -363,6 +364,8 @@ class Bert(Transformer):
                 if `True`, output of `[CLS]` token will transmit into a dense layer first.
             :param pooler_activation (:obj:`str`, optional, default: `tanh`):
                 activation of pooler in output layer.
+            :param use_real_former: (:obj:`bool`, optional, default: False)
+                whether to use [RealFormer](https://arxiv.org/abs/2012.11747) structure.
             :param shared_segment_embeddings (:obj:`bool`, optional, default: False):
                 if `True`, segment tokens share the embedding matrix with normal tokens.
         """
@@ -376,6 +379,8 @@ class Bert(Transformer):
         self.shared_segment_embeddings = shared_segment_embeddings
         if self.with_nsp:
             self.with_pool = True
+
+        self.attention_score = None
 
     def get_inputs(self,
                    input_embeds=None,
@@ -492,6 +497,7 @@ class Bert(Transformer):
                           index,
                           attention_mask=None,
                           head_mask=None,
+                          use_real_former=False,
                           encoder_hidden_context=None,
                           encode_attention_mask=None,
                           layer_norm_cond_inputs=None,
@@ -531,16 +537,32 @@ class Bert(Transformer):
             x_inputs.append(attention_mask)
         if head_mask is not None:
             x_inputs.append(head_mask)
+        if use_real_former:
+            if self.attention_score is None:
+                self.attention_score = self.apply(
+                    inputs=x,
+                    layer=Lambda,
+                    function=lambda x: K.zeros(
+                        shape=(K.shape(x)[0], self.num_attention_heads, K.shape(x)[1], K.shape(x)[1]),
+                        dtype=K.floatx()
+                    ),
+                    name='Attention-Zero-Score',
+                )
+            x_inputs.append(self.attention_score)
 
         xt = self.apply(
             inputs=x_inputs,
             layer=MultiHeadAttention,
             head_num=self.num_attention_heads,
             head_size=self.attention_head_size,
+            use_real_former=use_real_former,
             kernel_initializer=self.initializer,
             arguments=attention_args,
             name=attention_name,
         )
+        if use_real_former:
+            xt, att = xt
+            self.attention_score = att
 
         if self.attention_dropout_prob:
             xt = self.apply(
