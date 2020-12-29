@@ -233,7 +233,7 @@ class MultiHeadAttention(Layer):
         o = sequence_masking(o, query_mask, mode='mul', axis=1)
 
         if self.use_real_former:
-            return o, a_current
+            return [o, a_current]
 
         return o
 
@@ -244,7 +244,7 @@ class MultiHeadAttention(Layer):
             batch_size, query_length, key_length = input_shape[0], input_shape[1], input_shape[1]
 
         if self.use_real_former:
-            return (batch_size, query_length, self.output_dim), (batch_size, self.head_num, query_length, key_length)
+            return [(batch_size, query_length, self.output_dim), (batch_size, self.head_num, query_length, key_length)]
         return batch_size, query_length, self.output_dim
 
     def compute_mask(self, inputs, mask=None):
