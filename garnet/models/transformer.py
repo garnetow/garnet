@@ -36,6 +36,7 @@ class Transformer(WrappedModel):
                  attention_key_size=None,  # Attention中Q, K的head_size
                  hidden_act='gelu',  # FeedForward隐层的激活函数
                  embedding_size=None,  # 指定的embedding输出大小
+                 residual_attention_scores=False,  # Attention矩阵加残差
                  attention_dropout_prob=None,  # Attention层dropout比例
                  hidden_dropout_prob=None,  # 其他层dropout比例
                  max_position_embeddings=512,  # 位置编码最大范围
@@ -57,6 +58,9 @@ class Transformer(WrappedModel):
                 specified hidden size of `query` and `head` in attention.
             :param hidden_act (:obj:`str` or :obj:`Callable`, optional, default: `'gelu'`):
                 non-linear activation function in the encoder and pooler.
+            :param residual_attention_scores (:obj:`bool`, optional, default: `False`):
+                whether to use residual attention scores, usually used in [RealFormer](https://arxiv.org/abs/2012.11747)
+                structure.
             :param attention_dropout_prob (:obj:`float`, optional, default: `None`):
                 the dropout ratio for the attention probabilities.
             :param hidden_dropout_prob (:obj:`float`, optional, default: `None`):
@@ -88,6 +92,7 @@ class Transformer(WrappedModel):
         self.attention_head_size = hidden_size // num_attention_heads
         self.attention_key_size = attention_key_size or self.attention_head_size
         self.intermediate_size = intermediate_size
+        self.residual_attention_scores = residual_attention_scores
         self.attention_dropout_prob = attention_dropout_prob or 0.
         self.hidden_dropout_prob = hidden_dropout_prob or 0.
         self.hidden_act = hidden_act
@@ -99,13 +104,16 @@ class Transformer(WrappedModel):
         self.prefix = prefix or ''
         self.name = name
 
+        self.attention_mask = None
+        self.attention_score = None
+        self.relative_position = None
+
         self.input = None
         self.inputs = None
         self.output = None
         self.outputs = None
         self.layers = dict()
-        self.attention_mask = None
-        self.relative_position = None
+
         self.model = None
         self.built = False
 
@@ -197,7 +205,7 @@ class Transformer(WrappedModel):
         self.model = Model(self.inputs, self.outputs, name=self.name)
         self.built = True
 
-    def apply(self, inputs=None, layer=None, arguments=None, name=None, **kwargs):
+    def apply(self, inputs=None, inputs_additional=None, layer=None, arguments=None, name=None, **kwargs):
         r"""Apply layer to inputs, include layer building and calling.
 
         :param inputs: output of last layer.
@@ -207,9 +215,15 @@ class Transformer(WrappedModel):
         :param kwargs: parameters delivered to layer initialization.
         """
 
+        inputs_additional = inputs_additional or dict()
+
         arguments = arguments or dict()
         name = self.add_prefix(name)
         kwargs['name'] = name
+
+        if layer is MultiHeadAttention and self.residual_attention_scores:
+            kwargs['return_attention_scores'] = True
+
         if name not in self.layers:
             layer = layer(**kwargs)
             name = layer.name
@@ -218,6 +232,41 @@ class Transformer(WrappedModel):
         if inputs is None:
             return self.layers[name]
         else:
+            if isinstance(self.layers[name], MultiHeadAttention):
+                r"""Full inputs order of `MultiHeadAttention` layer:
+                - query sequence: (batch_size, query_seq_len, hidden_query)
+                - key sequence: (batch_size, key_seq_len, hidden_key)
+                - value sequence: (batch_size, key_seq_len, hidden_value)
+                - attention mask: (batch_size, query_length, key_length) or (batch_size, 1, query_length, key_length)
+                - attention bias: (batch_size, head_num, query_length, key_length)
+                - relative position: (query_seq_len, key_seq_len, num_heads)
+                - head mask: (num_heads,)
+                """
+                inputs = inputs if isinstance(inputs, list) else [inputs]
+
+                if 'attention_mask' in inputs_additional:
+                    inputs.append(inputs_additional['attention_mask'])
+
+                attention_bias = inputs_additional.get('attention_bias', None)
+                if self.residual_attention_scores and self.attention_score is not None:
+                    if attention_bias is not None:
+                        attention_bias = Add(name=name + '-Attention-Bias')([attention_bias, self.attention_score])
+                    else:
+                        attention_bias = self.attention_score
+                if attention_bias is not None:
+                    inputs.append(attention_bias)
+
+                if 'relative_position' in inputs_additional:
+                    inputs.append(inputs_additional['relative_position'])
+
+                if 'head_mask' in inputs_additional:
+                    inputs.append(inputs_additional['head_mask'])
+
+                if self.residual_attention_scores:
+                    o, a = self.layers[name](inputs, **arguments)
+                    self.attention_score = a
+                    return o
+
             return self.layers[name](inputs, **arguments)
 
     def get_inputs(self, **kwargs):
@@ -380,8 +429,6 @@ class Bert(Transformer):
         if self.with_nsp:
             self.with_pool = True
 
-        self.attention_score = None
-
     def get_inputs(self,
                    input_embeds=None,
                    **kwargs):
@@ -497,7 +544,6 @@ class Bert(Transformer):
                           index,
                           attention_mask=None,
                           head_mask=None,
-                          use_real_former=False,
                           encoder_hidden_context=None,
                           encode_attention_mask=None,
                           layer_norm_cond_inputs=None,
@@ -532,37 +578,22 @@ class Bert(Transformer):
         }
 
         # apply self-attention
-        x_inputs = [x, x, x]
+        add_inputs = dict()
         if attention_mask is not None:
-            x_inputs.append(attention_mask)
+            add_inputs['attention_mask'] = attention_mask
         if head_mask is not None:
-            x_inputs.append(head_mask)
-        if use_real_former:
-            if self.attention_score is None:
-                self.attention_score = self.apply(
-                    inputs=x,
-                    layer=Lambda,
-                    function=lambda x: K.zeros(
-                        shape=(K.shape(x)[0], self.num_attention_heads, K.shape(x)[1], K.shape(x)[1]),
-                        dtype=K.floatx()
-                    ),
-                    name='Attention-Zero-Score',
-                )
-            x_inputs.append(self.attention_score)
+            add_inputs['head_mask'] = head_mask
 
         xt = self.apply(
-            inputs=x_inputs,
+            inputs=[x, x, x],
+            inputs_additional=add_inputs,
             layer=MultiHeadAttention,
             head_num=self.num_attention_heads,
             head_size=self.attention_head_size,
-            use_real_former=use_real_former,
             kernel_initializer=self.initializer,
             arguments=attention_args,
             name=attention_name,
         )
-        if use_real_former:
-            xt, att = xt
-            self.attention_score = att
 
         if self.attention_dropout_prob:
             xt = self.apply(
@@ -981,8 +1012,13 @@ class T5Encoder(T5Base):
             name='{}-Norm'.format(attention_name),
         )
 
+        # apply self-attention
+        add_inputs = dict()
+        add_inputs['relative_position'] = relative_position
+
         xt = self.apply(
-            inputs=[xt, xt, xt, relative_position],
+            inputs=[xt, xt, xt],
+            inputs_additional=add_inputs,
             layer=MultiHeadAttention,
             head_num=self.num_attention_heads,
             head_size=self.attention_head_size,

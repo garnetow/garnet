@@ -25,8 +25,8 @@ class MultiHeadAttention(Layer):
         :param use_bias (bool, optional, default: `True`): Whether to use bias term.
         :param attention_scale (bool, optional, default: `True`): whether apply scale on attention matrix.
         :param activation: Activations for linear mappings.
-        :param use_real_former: (:obj:`bool`, optional, default: False)
-            whether to use [RealFormer](https://arxiv.org/abs/2012.11747) structure.
+        :param return_attention_score: (:obj:`bool`, optional, default: False)
+            whether to return attention score tensor. Used in [RealFormer](https://arxiv.org/abs/2012.11747) structure.
         :param kernel_initializer: Initializer for linear mappings.
         :param bias_initializer: Initializer for linear mappings.
         :param kernel_regularizer: Regularizer for linear mappings.
@@ -43,7 +43,7 @@ class MultiHeadAttention(Layer):
                  use_bias=True,
                  attention_scale=True,
                  activation=None,
-                 use_real_former=False,
+                 return_attention_score=False,
                  kernel_initializer='glorot_normal',
                  bias_initializer='zeros',
                  kernel_regularizer=None,
@@ -60,7 +60,7 @@ class MultiHeadAttention(Layer):
         self.key_size = key_size or head_size
         self.use_bias = use_bias
         self.attention_scale = attention_scale
-        self.use_real_former = use_real_former
+        self.return_attention_score = return_attention_score
 
         self.activation = keras.activations.get(activation)
         self.kernel_initializer = keras.initializers.get(kernel_initializer)
@@ -124,6 +124,7 @@ class MultiHeadAttention(Layer):
              inputs,
              mask=None,
              attention_mask=None,
+             attention_bias=None,
              relative_position=None,
              head_mask=None,
              **kwargs):
@@ -133,9 +134,9 @@ class MultiHeadAttention(Layer):
         - key sequence: (batch_size, key_seq_len, hidden_key)
         - value sequence: (batch_size, key_seq_len, hidden_value)
         - attention mask: (batch_size, query_length, key_length) or (batch_size, 1, query_length, key_length)
+        - attention bias: (batch_size, head_num, query_length, key_length)
         - relative position: (query_seq_len, key_seq_len, num_heads)
         - head mask: (num_heads,)
-        - former layer attention: (batch_size, query_length, key_length)
         """
 
         num_inputs = 3
@@ -156,16 +157,14 @@ class MultiHeadAttention(Layer):
         if attention_mask:
             attention_mask = inputs[num_inputs]
             num_inputs += 1
+        if attention_bias:
+            attention_bias = inputs[num_inputs]
+            num_inputs += 1
         if relative_position:
             position_embedding = inputs[num_inputs]
             num_inputs += 1
         if head_mask:
             head_mask = inputs[num_inputs]
-            num_inputs += 1
-
-        former_attention = None
-        if self.use_real_former:
-            former_attention = inputs[num_inputs]
             num_inputs += 1
 
         # linear transformation
@@ -210,30 +209,28 @@ class MultiHeadAttention(Layer):
                 attention_mask = K.expand_dims(attention_mask, axis=1)
             a -= (1 - attention_mask) * 1e12
 
-        a_current = None
-        if self.use_real_former:
-            a += former_attention
-            a_current = a
+        if attention_bias is not None:
+            a += attention_bias
 
         # apply softmax on each query sequence steps
-        a = K.softmax(a, axis=-1)
+        A = K.softmax(a, axis=-1)
 
         # apply head mask
         if head_mask is not None and head_mask is not False:
             # head_mask with shape (num_heads,)
             head_mask = K.expand_dims(K.expand_dims(K.expand_dims(head_mask, axis=0), axis=-1), axis=-1)
-            a = a * head_mask
+            A *= head_mask
 
         # get output
-        o = tf.einsum('bhjk,bkhd->bjhd', a, vw)  # (batch_size, query_seq_len, head_num, head_size)
+        o = tf.einsum('bhjk,bkhd->bjhd', A, vw)  # (batch_size, query_seq_len, head_num, head_size)
         o = K.reshape(o, shape=(-1, K.shape(o)[1], self.output_dim))  # (batch_size, query_seq_len, head_num*head_size)
         o = self.o_proj(o)
 
         # apply query sequence mask
         o = sequence_masking(o, query_mask, mode='mul', axis=1)
 
-        if self.use_real_former:
-            return [o, a_current]
+        if self.return_attention_score:
+            return [o, a]
 
         return o
 
@@ -242,14 +239,16 @@ class MultiHeadAttention(Layer):
             batch_size, query_length, key_length = input_shape[0][0], input_shape[0][1], input_shape[1][1]
         else:
             batch_size, query_length, key_length = input_shape[0], input_shape[1], input_shape[1]
+        output_shape = (batch_size, query_length, self.output_dim)
 
-        if self.use_real_former:
-            return [(batch_size, query_length, self.output_dim), (batch_size, self.head_num, query_length, key_length)]
-        return batch_size, query_length, self.output_dim
+        if self.return_attention_score:
+            attention_shape = (batch_size, self.head_num, query_length, key_length)
+            return [output_shape, attention_shape]
+        return output_shape
 
     def compute_mask(self, inputs, mask=None):
         mask = mask[0] if isinstance(mask, list) else mask
-        if self.use_real_former:
+        if self.return_attention_score:
             return [mask, None]
         return mask
 
@@ -262,7 +261,7 @@ class MultiHeadAttention(Layer):
             'use_bias': self.use_bias,
             'attention_scale': self.attention_scale,
             'activation': keras.activations.serialize(self.activation),
-            'use_real_former': self.use_real_former,
+            'return_attention_score': self.return_attention_score,
             'kernel_initializer': keras.initializers.serialize(self.kernel_initializer),
             'bias_initializer': keras.initializers.serialize(self.bias_initializer),
             'kernel_regularizer': keras.regularizers.serialize(self.kernel_regularizer),
