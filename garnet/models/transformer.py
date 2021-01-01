@@ -1225,8 +1225,13 @@ class T5Decoder(LanguageModelMixin, T5Base):
             name='{}-Norm'.format(self_attention_name),
         )
 
+        add_inputs = dict()
+        add_inputs['attention_mask'] = attention_mask
+        add_inputs['relative_position'] = self_rp
+
         xt = self.apply(
-            inputs=[xt, xt, xt, attention_mask, self_rp],
+            inputs=[xt, xt, xt],
+            inputs_additional=add_inputs,
             layer=MultiHeadAttention,
             head_num=self.num_attention_heads,
             head_size=self.attention_head_size,
@@ -1268,8 +1273,12 @@ class T5Decoder(LanguageModelMixin, T5Base):
             name='{}-Norm'.format(cross_attention_name),
         )
 
+        add_inputs = dict()
+        add_inputs['relative_position'] = cross_rp
+
         xt = self.apply(
-            inputs=[xt, context, context, cross_rp],
+            inputs=[xt, context, context],
+            inputs_additional=add_inputs,
             layer=MultiHeadAttention,
             head_num=self.num_attention_heads,
             head_size=self.attention_head_size,
