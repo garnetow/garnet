@@ -25,7 +25,7 @@ class MultiHeadAttention(Layer):
         :param use_bias (bool, optional, default: `True`): Whether to use bias term.
         :param attention_scale (bool, optional, default: `True`): whether apply scale on attention matrix.
         :param activation: Activations for linear mappings.
-        :param return_attention_score: (:obj:`bool`, optional, default: False)
+        :param return_attention_scores: (:obj:`bool`, optional, default: False)
             whether to return attention score tensor. Used in [RealFormer](https://arxiv.org/abs/2012.11747) structure.
         :param kernel_initializer: Initializer for linear mappings.
         :param bias_initializer: Initializer for linear mappings.
@@ -43,7 +43,7 @@ class MultiHeadAttention(Layer):
                  use_bias=True,
                  attention_scale=True,
                  activation=None,
-                 return_attention_score=False,
+                 return_attention_scores=False,
                  kernel_initializer='glorot_normal',
                  bias_initializer='zeros',
                  kernel_regularizer=None,
@@ -60,7 +60,7 @@ class MultiHeadAttention(Layer):
         self.key_size = key_size or head_size
         self.use_bias = use_bias
         self.attention_scale = attention_scale
-        self.return_attention_score = return_attention_score
+        self.return_attention_scores = return_attention_scores
 
         self.activation = keras.activations.get(activation)
         self.kernel_initializer = keras.initializers.get(kernel_initializer)
@@ -229,7 +229,7 @@ class MultiHeadAttention(Layer):
         # apply query sequence mask
         o = sequence_masking(o, query_mask, mode='mul', axis=1)
 
-        if self.return_attention_score:
+        if self.return_attention_scores:
             return [o, a]
 
         return o
@@ -241,14 +241,14 @@ class MultiHeadAttention(Layer):
             batch_size, query_length, key_length = input_shape[0], input_shape[1], input_shape[1]
         output_shape = (batch_size, query_length, self.output_dim)
 
-        if self.return_attention_score:
+        if self.return_attention_scores:
             attention_shape = (batch_size, self.head_num, query_length, key_length)
             return [output_shape, attention_shape]
         return output_shape
 
     def compute_mask(self, inputs, mask=None):
         mask = mask[0] if isinstance(mask, list) else mask
-        if self.return_attention_score:
+        if self.return_attention_scores:
             return [mask, None]
         return mask
 
@@ -261,7 +261,7 @@ class MultiHeadAttention(Layer):
             'use_bias': self.use_bias,
             'attention_scale': self.attention_scale,
             'activation': keras.activations.serialize(self.activation),
-            'return_attention_score': self.return_attention_score,
+            'return_attention_scores': self.return_attention_scores,
             'kernel_initializer': keras.initializers.serialize(self.kernel_initializer),
             'bias_initializer': keras.initializers.serialize(self.bias_initializer),
             'kernel_regularizer': keras.regularizers.serialize(self.kernel_regularizer),
