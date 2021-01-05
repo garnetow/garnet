@@ -394,7 +394,6 @@ class Bert(Transformer):
                  with_mlm=False,  # 输出是否增加 Masked Language Model 部分
                  pooler_dense=True,  # [CLS]输出是否经过Dense层转换
                  pooler_activation='tanh',  # [CLS]输出转换的Dense层使用的激活函数, 与`pooler_dense`参数配合使用
-                 use_real_former=False,  # 是否使用RealFormer结构
                  shared_segment_embeddings=False,  # segment跟token是否共享embedding参数
                  **kwargs):
         r"""Bert model. See more in [Attention is all you need](https://arxiv.org/abs/1706.03762).
@@ -413,8 +412,6 @@ class Bert(Transformer):
                 if `True`, output of `[CLS]` token will transmit into a dense layer first.
             :param pooler_activation (:obj:`str`, optional, default: `tanh`):
                 activation of pooler in output layer.
-            :param use_real_former: (:obj:`bool`, optional, default: False)
-                whether to use [RealFormer](https://arxiv.org/abs/2012.11747) structure.
             :param shared_segment_embeddings (:obj:`bool`, optional, default: False):
                 if `True`, segment tokens share the embedding matrix with normal tokens.
         """
