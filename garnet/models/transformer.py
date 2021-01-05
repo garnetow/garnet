@@ -245,6 +245,7 @@ class Transformer(WrappedModel):
                 inputs = inputs if isinstance(inputs, list) else [inputs]
 
                 if 'attention_mask' in inputs_additional:
+                    arguments['attention_mask'] = True
                     inputs.append(inputs_additional['attention_mask'])
 
                 attention_bias = inputs_additional.get('attention_bias', None)
@@ -254,12 +255,15 @@ class Transformer(WrappedModel):
                     else:
                         attention_bias = self.attention_score
                 if attention_bias is not None:
+                    arguments['attention_bias'] = True
                     inputs.append(attention_bias)
 
                 if 'relative_position' in inputs_additional:
+                    arguments['relative_position'] = True
                     inputs.append(inputs_additional['relative_position'])
 
                 if 'head_mask' in inputs_additional:
+                    arguments['head_mask'] = True
                     inputs.append(inputs_additional['head_mask'])
 
                 if self.residual_attention_scores:
