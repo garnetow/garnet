@@ -223,7 +223,10 @@ class Transformer(WrappedModel):
         kwargs['name'] = name
 
         if name not in self.layers:
-            layer = layer(**kwargs)
+            if layer is MultiHeadAttention:
+                layer = self.create_multi_head_attention(layer, **kwargs)
+            else:
+                layer = layer(**kwargs)
             name = layer.name
             self.layers[name] = layer
 
@@ -237,6 +240,11 @@ class Transformer(WrappedModel):
                                                    call_args=arguments)
         else:
             return self.layers[name](inputs, **arguments)
+
+    def create_multi_head_attention(self, layer, **kwargs):
+        if self.residual_attention_scores:
+            kwargs['return_attention_scores'] = True
+        return layer(**kwargs)
 
     def apply_multi_head_attention(self, name, inputs, inputs_additional=None, kwargs=None, call_args=None):
         r"""Full inputs order of `MultiHeadAttention` layer:
