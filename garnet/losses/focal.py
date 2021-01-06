@@ -133,7 +133,7 @@ def sparse_categorical_focal_loss(gamma=2., alpha=1.):
                 _alpha = K.expand_dims(_alpha, axis=0)
 
         # Transfer class index into one-hot sparse labels
-        y_true = K.one_hot(y_true, num_classes=K.int_shape(y_pred)[-1])
+        y_true = K.one_hot(K.cast(y_true, dtype='int32'), num_classes=K.int_shape(y_pred)[-1])
         y_true = K.cast(y_true, dtype=K.dtype(y_pred))
 
         # Scale predictions so that the class probas of each sample sum to 1
