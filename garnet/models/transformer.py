@@ -209,6 +209,7 @@ class Transformer(WrappedModel):
         r"""Apply layer to inputs, include layer building and calling.
 
         :param inputs: output of last layer.
+        :param inputs_additional: special additional inputs given to custom layer.
         :param layer: class of the layer to apply.
         :param arguments: parameters delivered to :meth:`layer.call` method.
         :param name: name of the layer.
@@ -221,9 +222,6 @@ class Transformer(WrappedModel):
         name = self.add_prefix(name)
         kwargs['name'] = name
 
-        if layer is MultiHeadAttention and self.residual_attention_scores:
-            kwargs['return_attention_scores'] = True
-
         if name not in self.layers:
             layer = layer(**kwargs)
             name = layer.name
@@ -231,47 +229,60 @@ class Transformer(WrappedModel):
 
         if inputs is None:
             return self.layers[name]
+        elif isinstance(self.layers[name], MultiHeadAttention):
+            return self.apply_multi_head_attention(name,
+                                                   inputs,
+                                                   inputs_additional=inputs_additional,
+                                                   kwargs=kwargs,
+                                                   call_args=arguments)
         else:
-            if isinstance(self.layers[name], MultiHeadAttention):
-                r"""Full inputs order of `MultiHeadAttention` layer:
-                - query sequence: (batch_size, query_seq_len, hidden_query)
-                - key sequence: (batch_size, key_seq_len, hidden_key)
-                - value sequence: (batch_size, key_seq_len, hidden_value)
-                - attention mask: (batch_size, query_length, key_length) or (batch_size, 1, query_length, key_length)
-                - attention bias: (batch_size, head_num, query_length, key_length)
-                - relative position: (query_seq_len, key_seq_len, num_heads)
-                - head mask: (num_heads,)
-                """
-                inputs = inputs if isinstance(inputs, list) else [inputs]
-
-                if 'attention_mask' in inputs_additional:
-                    arguments['attention_mask'] = True
-                    inputs.append(inputs_additional['attention_mask'])
-
-                attention_bias = inputs_additional.get('attention_bias', None)
-                if self.residual_attention_scores and self.attention_score is not None:
-                    if attention_bias is not None:
-                        attention_bias = Add(name=name + '-Attention-Bias')([attention_bias, self.attention_score])
-                    else:
-                        attention_bias = self.attention_score
-                if attention_bias is not None:
-                    arguments['attention_bias'] = True
-                    inputs.append(attention_bias)
-
-                if 'relative_position' in inputs_additional:
-                    arguments['relative_position'] = True
-                    inputs.append(inputs_additional['relative_position'])
-
-                if 'head_mask' in inputs_additional:
-                    arguments['head_mask'] = True
-                    inputs.append(inputs_additional['head_mask'])
-
-                if self.residual_attention_scores:
-                    o, a = self.layers[name](inputs, **arguments)
-                    self.attention_score = a
-                    return o
-
             return self.layers[name](inputs, **arguments)
+
+    def apply_multi_head_attention(self, name, inputs, inputs_additional=None, kwargs=None, call_args=None):
+        r"""Full inputs order of `MultiHeadAttention` layer:
+        - query sequence: (batch_size, query_seq_len, hidden_query)
+        - key sequence: (batch_size, key_seq_len, hidden_key)
+        - value sequence: (batch_size, key_seq_len, hidden_value)
+        - attention mask: (batch_size, query_length, key_length) or (batch_size, 1, query_length, key_length)
+        - attention bias: (batch_size, head_num, query_length, key_length)
+        - relative position: (query_seq_len, key_seq_len, num_heads)
+        - head mask: (num_heads,)
+        """
+
+        kwargs = kwargs or dict()
+        call_args = call_args or dict()
+        inputs_additional = inputs_additional or dict()
+
+        inputs = inputs if isinstance(inputs, list) else [inputs]
+
+        if 'attention_mask' in inputs_additional:
+            call_args['attention_mask'] = True
+            inputs.append(inputs_additional['attention_mask'])
+
+        attention_bias = inputs_additional.get('attention_bias', None)
+        if self.residual_attention_scores and self.attention_score is not None:
+            if attention_bias is not None:
+                attention_bias = Add(name=name + '-Attention-Bias')([attention_bias, self.attention_score])
+            else:
+                attention_bias = self.attention_score
+        if attention_bias is not None:
+            call_args['attention_bias'] = True
+            inputs.append(attention_bias)
+
+        if 'relative_position' in inputs_additional:
+            call_args['relative_position'] = True
+            inputs.append(inputs_additional['relative_position'])
+
+        if 'head_mask' in inputs_additional:
+            call_args['head_mask'] = True
+            inputs.append(inputs_additional['head_mask'])
+
+        if self.residual_attention_scores:
+            o, a = self.layers[name](inputs, **call_args)
+            self.attention_score = a
+            return o
+        else:
+            return self.layers[name](inputs, **call_args)
 
     def get_inputs(self, **kwargs):
         raise NotImplementedError
